@@ -3,57 +3,56 @@ import { useNavigate, useParams } from 'react-router-dom'
 import useStore from '../store/useStore.js'
 import { GAME_META, SUBJECTS, emptyActivity } from '../utils/schema.js'
 import { buildPlayUrl } from '../utils/codec.js'
-import QuizEditor from '../components/editors/QuizEditor.jsx'
-import MatchEditor from '../components/editors/MatchEditor.jsx'
+import QuizEditor      from '../components/editors/QuizEditor.jsx'
+import MatchEditor     from '../components/editors/MatchEditor.jsx'
+import SortEditor      from '../components/editors/SortEditor.jsx'
+import FillEditor      from '../components/editors/FillEditor.jsx'
+import MazeEditor      from '../components/editors/MazeEditor.jsx'
+import HighlightEditor from '../components/editors/HighlightEditor.jsx'
+import TimelineEditor  from '../components/editors/TimelineEditor.jsx'
 
-// 之後新增遊戲時在這裡 import 並加入 map
 const EDITORS = {
-  quiz: QuizEditor,
-  match: MatchEditor,
-  // sort: SortEditor,
-  // fill: FillEditor,
-  // maze: MazeEditor,
-  // highlight: HighlightEditor,
-  // timeline: TimelineEditor,
+  quiz:      QuizEditor,
+  match:     MatchEditor,
+  sort:      SortEditor,
+  fill:      FillEditor,
+  maze:      MazeEditor,
+  highlight: HighlightEditor,
+  timeline:  TimelineEditor,
 }
 
 const GRADES = ['一年級','二年級','三年級','四年級','五年級','六年級','國一','國二','國三']
-const STEPS = ['選遊戲類型', '填寫題目', '產生網址']
+const STEPS  = ['選遊戲類型', '填寫題目', '產生網址']
 
 export default function EditorPage() {
   const { gameType, activityId } = useParams()
   const navigate = useNavigate()
   const { draft, setDraft, updateDraftField, saveActivity } = useStore()
-  const [step, setStep] = useState(activityId ? 1 : 1) // 0=type,1=edit,2=url
+  const [step, setStep]               = useState(1)
   const [generatedUrl, setGeneratedUrl] = useState('')
-  const [copied, setCopied] = useState(false)
-  const [saveMsg, setSaveMsg] = useState('')
+  const [copied, setCopied]           = useState(false)
+  const [saveMsg, setSaveMsg]         = useState('')
 
-  // 若直接輸入網址進來，draft 可能是 null，補建空白
   useEffect(() => {
     if (!draft) {
-      const blank = emptyActivity(gameType)
-      setDraft(blank)
+      setDraft(emptyActivity(gameType))
     }
   }, [])
 
-  if (!draft) return <div className="page" style={{paddingTop:"3rem",textAlign:"center",color:"var(--c-text-muted)"}}>載入中...</div>
+  if (!draft) return (
+    <div className="page" style={{ paddingTop: '3rem', textAlign: 'center', color: 'var(--c-text-muted)' }}>
+      載入中...
+    </div>
+  )
 
   const EditorComponent = EDITORS[gameType]
   const meta = GAME_META[gameType]
 
   function handleGenerate() {
-    if (!draft.title.trim()) {
-      alert('請填寫標題')
-      return
-    }
-    if (!draft.items || draft.items.length === 0) {
-      alert('請至少新增一題')
-      return
-    }
-    const saved = saveActivity(draft)
-    const url = buildPlayUrl(draft)
-    setGeneratedUrl(url)
+    if (!draft.title.trim()) { alert('請填寫標題'); return }
+    if (!draft.items || draft.items.length === 0) { alert('請至少新增一題'); return }
+    saveActivity(draft)
+    setGeneratedUrl(buildPlayUrl(draft))
     setStep(2)
   }
 
@@ -72,7 +71,6 @@ export default function EditorPage() {
 
   return (
     <div className="page">
-      {/* 頂部導航 */}
       <div style={styles.topBar}>
         <button onClick={() => navigate('/')} style={{ padding: '6px 10px', fontSize: 13 }}>
           <i className="ti ti-arrow-left" aria-hidden="true" /> 首頁
@@ -86,7 +84,6 @@ export default function EditorPage() {
         </button>
       </div>
 
-      {/* 步驟條 */}
       <div className="step-bar">
         {STEPS.map((s, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', flex: i < STEPS.length - 1 ? 1 : 'none' }}>
@@ -94,8 +91,7 @@ export default function EditorPage() {
               <div className="step-dot">
                 {step > i
                   ? <i className="ti ti-check" style={{ fontSize: 11 }} aria-hidden="true" />
-                  : i + 1
-                }
+                  : i + 1}
               </div>
               <span>{s}</span>
             </div>
@@ -104,10 +100,8 @@ export default function EditorPage() {
         ))}
       </div>
 
-      {/* Step 1: 編輯題目 */}
       {step === 1 && (
         <>
-          {/* 基本資訊 */}
           <div className="card">
             <div style={styles.metaRow}>
               <div style={{ flex: 2, minWidth: 140 }}>
@@ -134,7 +128,6 @@ export default function EditorPage() {
             </div>
           </div>
 
-          {/* 對應的遊戲 Editor */}
           {EditorComponent
             ? <EditorComponent />
             : (
@@ -156,28 +149,22 @@ export default function EditorPage() {
         </>
       )}
 
-      {/* Step 2: 產生網址 */}
       {step === 2 && (
         <div className="card">
           <div style={styles.successBadge}>
             <i className="ti ti-circle-check" aria-hidden="true" /> 網址已產生
           </div>
-
           <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
             <span className="tag tag-blue">{draft.subject}</span>
             <span className="tag tag-green">{meta?.label}</span>
             <span className="tag tag-gray">{draft.grade}</span>
             <span className="tag tag-gray">{draft.items?.length} 題</span>
           </div>
-
           <p style={{ fontWeight: 500, fontSize: 15, marginBottom: '1rem' }}>{draft.title}</p>
-
           <label className="label">學生連結</label>
           <div className="url-box">
-            <span>{generatedUrl.slice(0, 40)}</span>
-            {generatedUrl.slice(40)}
+            <span>{generatedUrl.slice(0, 40)}</span>{generatedUrl.slice(40)}
           </div>
-
           <div className="btn-row" style={{ marginBottom: '1rem' }}>
             <button className="btn-primary" onClick={handleCopy} style={{ flex: 2 }}>
               <i className="ti ti-copy" aria-hidden="true" />
@@ -187,14 +174,11 @@ export default function EditorPage() {
               <i className="ti ti-external-link" aria-hidden="true" /> 預覽
             </button>
           </div>
-
           <div style={styles.tip}>
             <i className="ti ti-brand-google" style={{ fontSize: 15, verticalAlign: -2 }} aria-hidden="true" />
             {' '}貼到 Google Meet 聊天室，學生直接點開即可
           </div>
-
           <div className="divider" />
-
           <div className="btn-row">
             <button onClick={() => setStep(1)} style={{ flex: 1 }}>
               <i className="ti ti-edit" aria-hidden="true" /> 繼續編輯

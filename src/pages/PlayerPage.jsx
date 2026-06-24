@@ -2,24 +2,28 @@ import { useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { decodeData } from '../utils/codec.js'
 import { GAME_META } from '../utils/schema.js'
-import QuizPlayer from '../components/games/QuizPlayer.jsx'
-import MatchPlayer from '../components/games/MatchPlayer.jsx'
+import QuizPlayer      from '../components/games/QuizPlayer.jsx'
+import MatchPlayer     from '../components/games/MatchPlayer.jsx'
+import SortPlayer      from '../components/games/SortPlayer.jsx'
+import FillPlayer      from '../components/games/FillPlayer.jsx'
+import MazePlayer      from '../components/games/MazePlayer.jsx'
+import HighlightPlayer from '../components/games/HighlightPlayer.jsx'
+import TimelinePlayer  from '../components/games/TimelinePlayer.jsx'
 
 const PLAYERS = {
-  quiz: QuizPlayer,
-  match: MatchPlayer,
-  // sort: SortPlayer,
-  // fill: FillPlayer,
-  // maze: MazePlayer,
-  // highlight: HighlightPlayer,
-  // timeline: TimelinePlayer,
+  quiz:      QuizPlayer,
+  match:     MatchPlayer,
+  sort:      SortPlayer,
+  fill:      FillPlayer,
+  maze:      MazePlayer,
+  highlight: HighlightPlayer,
+  timeline:  TimelinePlayer,
 }
 
 export default function PlayerPage() {
   const { encoded } = useParams()
-  const navigate = useNavigate()
-
-  const activity = useMemo(() => decodeData(encoded), [encoded])
+  const navigate    = useNavigate()
+  const activity    = useMemo(() => decodeData(encoded), [encoded])
 
   if (!activity) {
     return (
@@ -41,7 +45,6 @@ export default function PlayerPage() {
 
   return (
     <div className="page">
-      {/* 題目標頭 */}
       <div style={styles.header}>
         <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
           <span className="tag tag-blue">{activity.subject}</span>
@@ -56,7 +59,6 @@ export default function PlayerPage() {
         <h1 style={styles.title}>{activity.title}</h1>
       </div>
 
-      {/* 遊戲元件 */}
       {PlayerComponent
         ? <PlayerComponent activity={activity} />
         : (
@@ -76,8 +78,5 @@ const styles = {
     paddingBottom: '1rem',
     borderBottom: '1px solid var(--c-border)',
   },
-  title: {
-    fontSize: 20,
-    fontWeight: 500,
-  },
+  title: { fontSize: 20, fontWeight: 500 },
 }
