@@ -1,411 +1,718 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 
-const COLS = 11
-const ROWS = 11
-const CELL = 36
+// ── 常數 ─────────────────────────────────────────────────────
+const COLS = 15
+const ROWS = 15
+const CELL = 38
 
-// ── 迷宮生成（recursive backtracking） ───────────────────────
-function generateMaze(cols, rows) {
-  const walls = Array.from({ length: rows }, () =>
-    Array.from({ length: cols }, () => ({ top: true, left: true, right: true, bottom: true }))
+// 6 個房間：中心格座標 + 固定入口方向
+// 入口方向：從房間邊緣往外打通一格走廊
+const ROOM_DEFS = [
+  { r: 3,  c: 3,  entry: 'right' },  // 左上，入口朝右
+  { r: 3,  c: 11, entry: 'left'  },  // 右上，入口朝左
+  { r: 11, c: 3,  entry: 'right' },  // 左下，入口朝右
+  { r: 11, c: 11, entry: 'left'  },  // 右下，入口朝左
+  { r: 3,  c: 7,  entry: 'down'  },  // 中上，入口朝下
+  { r: 11, c: 7,  entry: 'up'    },  // 中下，入口朝上
+]
+
+const PLAYER_START = { r: 7, c: 7 }
+
+// 怪物候選起點（走廊區，遠離角落和中心）
+const ENEMY_CANDIDATES = [
+  { r: 1, c: 5 }, { r: 1, c: 9 },
+  { r: 5, c: 1 }, { r: 9, c: 1 },
+  { r: 5, c: 13 }, { r: 9, c: 13 },
+  { r: 13, c: 5 }, { r: 13, c: 9 },
+  { r: 5, c: 5 }, { r: 5, c: 9 },
+  { r: 9, c: 5 }, { r: 9, c: 9 },
+]
+
+const CHASE_RADIUS = 5
+
+// 穿越通道：上下互通的欄、左右互通的列（固定位置，不與房間衝突）
+const TUNNEL_COLS = [4, 10]   // c=4, c=10 上下穿越
+const TUNNEL_ROWS = [4, 10]   // r=4, r=10 左右穿越
+const DIRS_DEF = [
+  [-1, 0, 'top',    'bottom'],
+  [ 1, 0, 'bottom', 'top'   ],
+  [ 0,-1, 'left',   'right' ],
+  [ 0, 1, 'right',  'left'  ],
+]
+
+// ── 迷宮生成 ─────────────────────────────────────────────────
+function makeWalls() {
+  return Array.from({ length: ROWS }, () =>
+    Array.from({ length: COLS }, () => ({ top: true, bottom: true, left: true, right: true }))
   )
-  const visited = Array.from({ length: rows }, () => new Array(cols).fill(false))
+}
 
+function removeWall(walls, r, c, dir) {
+  const opp = { top:'bottom', bottom:'top', left:'right', right:'left' }
+  const delta = { top:[-1,0], bottom:[1,0], left:[0,-1], right:[0,1] }
+  const [dr, dc] = delta[dir]
+  const nr = r + dr, nc = c + dc
+  if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) return
+  walls[r][c][dir] = false
+  walls[nr][nc][opp[dir]] = false
+}
+
+function inBounds(r, c) { return r >= 0 && r < ROWS && c >= 0 && c < COLS }
+
+// 房間佔用的格子集合（3×3）
+function roomCells(room) {
+  const cells = new Set()
+  for (let dr = -1; dr <= 1; dr++)
+    for (let dc = -1; dc <= 1; dc++)
+      cells.add(`${room.r+dr},${room.c+dc}`)
+  return cells
+}
+
+function generateMaze(activeRooms) {
+  const walls   = makeWalls()
+  const visited = Array.from({ length: ROWS }, () => new Array(COLS).fill(false))
+
+  // 標記所有房間格子為已訪問（carve 不進去）
+  const allRoomCells = new Set()
+  for (const room of activeRooms) {
+    for (const key of roomCells(room)) {
+      allRoomCells.add(key)
+      const [r, c] = key.split(',').map(Number)
+      if (inBounds(r, c)) visited[r][c] = true
+    }
+  }
+
+  // 先打通每個房間內部（3×3 全打通）
+  for (const room of activeRooms) {
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        const r = room.r + dr, c = room.c + dc
+        if (!inBounds(r, c)) continue
+        if (dc < 1 && inBounds(r, c+1) && allRoomCells.has(`${r},${c+1}`)) removeWall(walls, r, c, 'right')
+        if (dr < 1 && inBounds(r+1, c) && allRoomCells.has(`${r+1},${c}`)) removeWall(walls, r, c, 'bottom')
+      }
+    }
+  }
+
+  // Recursive backtracking — 只在非房間格走
   function carve(r, c) {
     visited[r][c] = true
-    const dirs = [[0,1,'right','left'],[0,-1,'left','right'],[1,0,'bottom','top'],[-1,0,'top','bottom']]
-    dirs.sort(() => Math.random() - 0.5)
+    const dirs = [...DIRS_DEF].sort(() => Math.random() - 0.5)
     for (const [dr, dc, wa, wb] of dirs) {
       const nr = r + dr, nc = c + dc
-      if (nr < 0 || nr >= rows || nc < 0 || nc >= cols || visited[nr][nc]) continue
+      if (!inBounds(nr, nc) || visited[nr][nc]) continue
       walls[r][c][wa] = false
       walls[nr][nc][wb] = false
       carve(nr, nc)
     }
   }
-  carve(0, 0)
+
+  // 從玩家起點開始 carve
+  carve(PLAYER_START.r, PLAYER_START.c)
+
+  // 確保所有走廊格都被 carve 到（防止孤立格）
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (!visited[r][c]) carve(r, c)
+    }
+  }
+
+  // 打通每個房間的入口（房間邊緣 → 外側走廊格）
+  for (const room of activeRooms) {
+    const entryMap = {
+      right: { wallR: room.r, wallC: room.c + 1, dir: 'right' },
+      left:  { wallR: room.r, wallC: room.c - 1, dir: 'left'  },
+      down:  { wallR: room.r + 1, wallC: room.c, dir: 'bottom'},
+      up:    { wallR: room.r - 1, wallC: room.c, dir: 'top'   },
+    }
+    const e = entryMap[room.entry]
+    if (inBounds(e.wallR, e.wallC)) {
+      removeWall(walls, e.wallR, e.wallC, e.dir)
+    }
+  }
+
+  // 打通穿越通道（邊界格子的外牆）
+  for (const c of TUNNEL_COLS) {
+    // 上邊界 row=0 的 top 牆 和 下邊界 row=ROWS-1 的 bottom 牆 互通（邏輯上：移動時 wrap）
+    walls[0][c].top        = false
+    walls[ROWS-1][c].bottom = false
+  }
+  for (const r of TUNNEL_ROWS) {
+    walls[r][0].left         = false
+    walls[r][COLS-1].right   = false
+  }
+
   return walls
 }
 
-// ── BFS 找最短路徑長度 ────────────────────────────────────────
-function bfsPathLength(walls, startR, startC, endR, endC) {
-  const q = [[startR, startC, 0]]
-  const seen = new Set([`${startR},${startC}`])
-  while (q.length) {
-    const [r, c, d] = q.shift()
-    if (r === endR && c === endC) return d
-    const moves = [
-      [-1,0,'top'],[1,0,'bottom'],[0,-1,'left'],[0,1,'right']
-    ]
-    for (const [dr, dc, wall] of moves) {
-      if (walls[r][c][wall]) continue
-      const key = `${r+dr},${c+dc}`
-      if (!seen.has(key)) { seen.add(key); q.push([r+dr, c+dc, d+1]) }
+// 依難度拆牆（增加開放路線）
+function knockWalls(walls, difficulty, allRoomCells) {
+  const rate = difficulty === 'easy' ? 0.35 : difficulty === 'normal' ? 0.20 : 0.15
+  const dirs = ['right', 'bottom']
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (allRoomCells.has(`${r},${c}`)) continue
+      for (const dir of dirs) {
+        if (!walls[r][c][dir]) continue
+        const [dr, dc] = dir === 'right' ? [0,1] : [1,0]
+        const nr = r+dr, nc = c+dc
+        if (!inBounds(nr, nc)) continue
+        if (allRoomCells.has(`${nr},${nc}`)) continue
+        if (Math.random() < rate) removeWall(walls, r, c, dir)
+      }
     }
   }
-  return Infinity
 }
 
-export default function MazePlayer({ activity }) {
-  const items = activity.items || []
-  const canvasRef = useRef(null)
+// ── BFS ──────────────────────────────────────────────────────
+function bfsPath(walls, sr, sc, er, ec) {
+  if (sr === er && sc === ec) return []
+  const q    = [{ r: sr, c: sc, path: [] }]
+  const seen = new Set([`${sr},${sc}`])
+  while (q.length) {
+    const { r, c, path } = q.shift()
+    for (const [dr, dc, wall] of [[-1,0,'top'],[1,0,'bottom'],[0,-1,'left'],[0,1,'right']]) {
+      if (walls[r][c][wall]) continue
+      const nr = r+dr, nc = c+dc
+      if (!inBounds(nr, nc)) continue
+      const key = `${nr},${nc}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      const np = [...path, { r: nr, c: nc }]
+      if (nr === er && nc === ec) return np
+      q.push({ r: nr, c: nc, path: np })
+    }
+  }
+  return []
+}
 
-  const [phase, setPhase] = useState('intro') // intro | playing | question | win | lose
-  const [qIdx, setQIdx]   = useState(0)
-  const [selected, setSelected] = useState(null)
-  const [feedback, setFeedback] = useState(null) // 'correct' | 'wrong'
-  const [score, setScore]  = useState(0)
-  const [mistakes, setMistakes] = useState(0)
+function bfsDist(walls, sr, sc, er, ec) {
+  return bfsPath(walls, sr, sc, er, ec).length
+}
 
-  // 迷宮狀態（ref，避免 canvas 重繪觸發 re-render）
-  const mazeRef     = useRef(null)
-  const playerRef   = useRef({ r: 0, c: 0 })
-  const chasersRef  = useRef([])  // [{ r, c }]
-  const exitRef     = useRef({ r: ROWS - 1, c: COLS - 1 })
-  const chaseTimer  = useRef(null)
+// ── 愛心 ─────────────────────────────────────────────────────
+function Hearts({ total, remaining }) {
+  return (
+    <div style={{ display:'flex', gap:3 }}>
+      {Array.from({ length: total }).map((_, i) => (
+        <span key={i} style={{ fontSize:18, opacity: i < remaining ? 1 : 0.2, transition:'opacity 0.3s' }}>❤️</span>
+      ))}
+    </div>
+  )
+}
 
-  // 初始化迷宮
-  function initMaze() {
-    const walls = generateMaze(COLS, ROWS)
-    mazeRef.current  = walls
-    playerRef.current  = { r: 0, c: 0 }
-    chasersRef.current = [{ r: ROWS - 1, c: 0 }, { r: 0, c: COLS - 1 }]
-    exitRef.current    = { r: ROWS - 1, c: COLS - 1 }
+// ── 主元件 ───────────────────────────────────────────────────
+export default function MazePlayer({ activity, onFinish, onRestart }) {
+  if (!activity) return null
+  const items      = activity.items || []
+  const meta       = activity.meta  || {}
+  const difficulty = meta.difficulty || 'normal'
+  const enemyCount = Math.min(4, Math.max(1, meta.enemies ?? 1))
+  const maxHearts  = Math.min(5, Math.max(1, meta.hearts  ?? 3))
+
+  const [phase,    setPhase]    = useState('intro')
+  const [qIdx,     setQIdx]     = useState(0)
+  const [hearts,   setHearts]   = useState(maxHearts)
+  const [score,    setScore]    = useState(0)
+  const [finished, setFinished] = useState(false)
+  const [flash,    setFlash]    = useState(null)  // 'correct'|'wrong'|'caught'
+
+  const wallsRef   = useRef(null)
+  const playerRef  = useRef({ ...PLAYER_START })
+  const enemiesRef = useRef([])
+  const roomsRef   = useRef([])
+  const heartsRef  = useRef(maxHearts)
+  const phaseRef   = useRef('intro')
+  const tickRef    = useRef(null)
+  const canvasRef  = useRef(null)
+  const qIdxRef    = useRef(0)
+
+  const item = items[qIdxRef.current % items.length]
+
+  // ── 選出本題使用的房間 ───────────────────────────────────
+  function getActiveRooms(currentItem) {
+    const optCount = Math.min(6, currentItem?.options?.length || 4)
+    return ROOM_DEFS.slice(0, optCount)
   }
 
-  // 畫迷宮
+  // ── 初始化迷宮和實體位置 ─────────────────────────────────
+  function initMaze(currentItem) {
+    const activeRooms = getActiveRooms(currentItem)
+    const roomKeysForKnock = new Set(activeRooms.flatMap(rm => [...roomCells(rm)]))
+    const walls       = generateMaze(activeRooms)
+    knockWalls(walls, difficulty, roomKeysForKnock)
+    wallsRef.current  = walls
+
+    // 隨機分配選項到房間
+    const optCount  = activeRooms.length
+    const optOrder  = Array.from({ length: optCount }, (_, i) => i).sort(() => Math.random() - 0.5)
+    roomsRef.current = activeRooms.map((rm, i) => ({ ...rm, optionIdx: optOrder[i] }))
+
+    // 玩家回起點
+    playerRef.current = { ...PLAYER_START }
+
+    // 怪物：從候選點中選，排除在房間內的、距玩家太近的
+    const allRoomKeys = new Set(activeRooms.flatMap(rm => [...roomCells(rm)]))
+    const validCandidates = ENEMY_CANDIDATES.filter(pos => {
+      if (allRoomKeys.has(`${pos.r},${pos.c}`)) return false
+      const d = bfsDist(walls, pos.r, pos.c, PLAYER_START.r, PLAYER_START.c)
+      return d > 4
+    })
+    const shuffled = [...validCandidates].sort(() => Math.random() - 0.5)
+    enemiesRef.current = shuffled.slice(0, enemyCount).map(pos => ({ ...pos }))
+  }
+
+  // ── Canvas 繪製 ───────────────────────────────────────────
   const draw = useCallback(() => {
     const canvas = canvasRef.current
-    if (!canvas || !mazeRef.current) return
-    const ctx = canvas.getContext('2d')
-    const W = COLS * CELL, H = ROWS * CELL
-    ctx.clearRect(0, 0, W, H)
+    if (!canvas || !wallsRef.current) return
+    const ctx   = canvas.getContext('2d')
+    const walls = wallsRef.current
+    const currentItem = items[qIdxRef.current % items.length]
 
-    const walls = mazeRef.current
-    ctx.strokeStyle = '#b4b2a9'
-    ctx.lineWidth   = 2
+    ctx.clearRect(0, 0, COLS * CELL, ROWS * CELL)
 
-    // 格子
+    // 背景
+    ctx.fillStyle = '#12122a'
+    ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL)
+
+    // 走廊格背景（淡色）
+    ctx.fillStyle = '#1a1a3e'
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++)
+        ctx.fillRect(c * CELL + 1, r * CELL + 1, CELL - 2, CELL - 2)
+
+    // 房間
+    for (const room of roomsRef.current) {
+      const x  = (room.c - 1) * CELL
+      const y  = (room.r - 1) * CELL
+      const w  = 3 * CELL
+      const opt = currentItem?.options?.[room.optionIdx] ?? ''
+
+      // 房間底色
+      ctx.fillStyle = '#252550'
+      ctx.fillRect(x + 1, y + 1, w - 2, w - 2)
+
+      // 房間邊框（帶入口缺口）
+      ctx.strokeStyle = '#7070cc'
+      ctx.lineWidth   = 2.5
+      const gapStart = CELL * 0.8   // 缺口在中間 cell 的中段
+      const gapEnd   = CELL * 2.2
+      // top
+      if (room.entry !== 'up') {
+        ctx.beginPath(); ctx.moveTo(x+2, y+2); ctx.lineTo(x+w-2, y+2); ctx.stroke()
+      } else {
+        ctx.beginPath(); ctx.moveTo(x+2, y+2); ctx.lineTo(x+gapStart, y+2); ctx.stroke()
+        ctx.beginPath(); ctx.moveTo(x+gapEnd, y+2); ctx.lineTo(x+w-2, y+2); ctx.stroke()
+      }
+      // bottom
+      if (room.entry !== 'down') {
+        ctx.beginPath(); ctx.moveTo(x+2, y+w-2); ctx.lineTo(x+w-2, y+w-2); ctx.stroke()
+      } else {
+        ctx.beginPath(); ctx.moveTo(x+2, y+w-2); ctx.lineTo(x+gapStart, y+w-2); ctx.stroke()
+        ctx.beginPath(); ctx.moveTo(x+gapEnd, y+w-2); ctx.lineTo(x+w-2, y+w-2); ctx.stroke()
+      }
+      // left
+      if (room.entry !== 'left') {
+        ctx.beginPath(); ctx.moveTo(x+2, y+2); ctx.lineTo(x+2, y+w-2); ctx.stroke()
+      } else {
+        ctx.beginPath(); ctx.moveTo(x+2, y+2); ctx.lineTo(x+2, y+gapStart); ctx.stroke()
+        ctx.beginPath(); ctx.moveTo(x+2, y+gapEnd); ctx.lineTo(x+2, y+w-2); ctx.stroke()
+      }
+      // right
+      if (room.entry !== 'right') {
+        ctx.beginPath(); ctx.moveTo(x+w-2, y+2); ctx.lineTo(x+w-2, y+w-2); ctx.stroke()
+      } else {
+        ctx.beginPath(); ctx.moveTo(x+w-2, y+2); ctx.lineTo(x+w-2, y+gapStart); ctx.stroke()
+        ctx.beginPath(); ctx.moveTo(x+w-2, y+gapEnd); ctx.lineTo(x+w-2, y+w-2); ctx.stroke()
+      }
+
+      // 選項文字
+      if (opt) {
+        ctx.fillStyle    = '#dde0ff'
+        ctx.textAlign    = 'center'
+        ctx.textBaseline = 'middle'
+        const cx   = x + w / 2
+        const cy   = y + w / 2
+        const fs   = opt.length > 6 ? 13 : opt.length > 4 ? 15 : 17
+        ctx.font   = `bold ${fs}px sans-serif`
+        if (opt.length > 6) {
+          const mid = Math.ceil(opt.length / 2)
+          ctx.fillText(opt.slice(0, mid), cx, cy - 10)
+          ctx.fillText(opt.slice(mid),    cx, cy + 10)
+        } else {
+          ctx.fillText(opt, cx, cy)
+        }
+      }
+    }
+
+    // 牆壁
+    ctx.strokeStyle = '#4444bb'
+    ctx.lineWidth   = 1.5
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
         const x = c * CELL, y = r * CELL
+        const w = walls[r][c]
         ctx.beginPath()
-        if (walls[r][c].top)    { ctx.moveTo(x, y);        ctx.lineTo(x + CELL, y) }
-        if (walls[r][c].left)   { ctx.moveTo(x, y);        ctx.lineTo(x, y + CELL) }
-        if (walls[r][c].bottom) { ctx.moveTo(x, y + CELL); ctx.lineTo(x + CELL, y + CELL) }
-        if (walls[r][c].right)  { ctx.moveTo(x + CELL, y); ctx.lineTo(x + CELL, y + CELL) }
+        if (w.top)    { ctx.moveTo(x,      y);      ctx.lineTo(x+CELL, y)      }
+        if (w.bottom) { ctx.moveTo(x,      y+CELL); ctx.lineTo(x+CELL, y+CELL) }
+        if (w.left)   { ctx.moveTo(x,      y);      ctx.lineTo(x,      y+CELL) }
+        if (w.right)  { ctx.moveTo(x+CELL, y);      ctx.lineTo(x+CELL, y+CELL) }
         ctx.stroke()
       }
     }
 
-    // 終點
-    const ex = exitRef.current
-    ctx.fillStyle = '#EAF3DE'
-    ctx.fillRect(ex.c * CELL + 2, ex.r * CELL + 2, CELL - 4, CELL - 4)
-    ctx.font = `${CELL * 0.6}px serif`
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText('🏁', ex.c * CELL + CELL / 2, ex.r * CELL + CELL / 2)
+    // 穿越通道視覺提示（青色箭頭標記）
+    ctx.fillStyle = '#00cccc'
+    ctx.font      = 'bold 11px sans-serif'
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    for (const c of TUNNEL_COLS) {
+      // 上邊
+      ctx.fillText('▲', c * CELL + CELL/2, CELL * 0.3)
+      // 下邊
+      ctx.fillText('▼', c * CELL + CELL/2, (ROWS - 1) * CELL + CELL * 0.7)
+    }
+    for (const r of TUNNEL_ROWS) {
+      // 左邊
+      ctx.fillText('◀', CELL * 0.3, r * CELL + CELL/2)
+      // 右邊
+      ctx.fillText('▶', (COLS - 1) * CELL + CELL * 0.7, r * CELL + CELL/2)
+    }
 
-    // 追兵
-    chasersRef.current.forEach(ch => {
-      ctx.fillStyle = '#E24B4A'
-      const cx2 = ch.c * CELL + CELL / 2, cy2 = ch.r * CELL + CELL / 2
-      ctx.beginPath()
-      ctx.arc(cx2, cy2, CELL * 0.35, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.font = `${CELL * 0.45}px serif`
-      ctx.fillText('👾', cx2, cy2)
-    })
+    // 敵人
+    ctx.font         = `${CELL * 0.6}px serif`
+    ctx.textAlign    = 'center'
+    ctx.textBaseline = 'middle'
+    for (const e of enemiesRef.current) {
+      ctx.fillText('👾', e.c * CELL + CELL / 2, e.r * CELL + CELL / 2)
+    }
 
     // 玩家
     const p = playerRef.current
-    const px = p.c * CELL + CELL / 2, py = p.r * CELL + CELL / 2
-    ctx.beginPath()
-    ctx.arc(px, py, CELL * 0.38, 0, Math.PI * 2)
-    ctx.fillStyle = '#185FA5'
-    ctx.fill()
-    ctx.font = `${CELL * 0.5}px serif`
-    ctx.fillText('🧑', px, py)
-  }, [])
+    ctx.fillText('🧑', p.c * CELL + CELL / 2, p.r * CELL + CELL / 2)
+  }, [items])
 
-  // 追兵移動（BFS 一步）
-  function moveChaser(ch) {
-    const walls = mazeRef.current
-    const p = playerRef.current
-    const moves = [[-1,0,'top'],[1,0,'bottom'],[0,-1,'left'],[0,1,'right']]
-    let best = null, bestDist = Infinity
-    for (const [dr, dc, wall] of moves) {
-      if (walls[ch.r][ch.c][wall]) continue
-      const nr = ch.r + dr, nc = ch.c + dc
-      const d = bfsPathLength(walls, nr, nc, p.r, p.c)
-      if (d < bestDist) { bestDist = d; best = { r: nr, c: nc } }
-    }
-    return best || ch
+  // ── 敵人移動 ─────────────────────────────────────────────
+  function moveEnemies(forceChase = false) {
+    const walls  = wallsRef.current
+    if (!walls) return
+    const player = playerRef.current
+
+    enemiesRef.current = enemiesRef.current.map(e => {
+      // 計算可移動的格子（含穿越通道）
+      const validMoves = DIRS_DEF
+        .filter(([,, wall]) => !walls[e.r][e.c][wall])
+        .map(([dr, dc]) => {
+          let nr = e.r + dr, nc = e.c + dc
+          if (nr < 0)     nr = ROWS - 1
+          if (nr >= ROWS) nr = 0
+          if (nc < 0)     nc = COLS - 1
+          if (nc >= COLS) nc = 0
+          return { r: nr, c: nc }
+        })
+
+      if (!validMoves.length) return e
+
+      if (difficulty === 'easy') {
+        // 全地圖隨機巡邏
+        return validMoves[Math.floor(Math.random() * validMoves.length)]
+      }
+
+      const dist = bfsDist(walls, e.r, e.c, player.r, player.c)
+
+      if (difficulty === 'normal') {
+        if (dist > CHASE_RADIUS) {
+          // 超出範圍：隨機巡邏
+          return validMoves[Math.floor(Math.random() * validMoves.length)]
+        }
+        // 靠近：追玩家
+      }
+
+      // hard 或 normal 靠近：BFS 追
+      const path = bfsPath(walls, e.r, e.c, player.r, player.c)
+      return path.length ? path[0] : e
+    })
   }
 
-  function tickChasers() {
-    chasersRef.current = chasersRef.current.map(ch => moveChaser(ch))
-    draw()
-    // 碰到玩家 → 答題
+  // ── 碰撞 / 觸發 ──────────────────────────────────────────
+  function checkTriggers() {
     const p = playerRef.current
-    const caught = chasersRef.current.some(ch => ch.r === p.r && ch.c === p.c)
-    if (caught) {
-      clearInterval(chaseTimer.current)
-      setPhase('question')
+
+    // 被敵人抓到
+    if (enemiesRef.current.some(e => e.r === p.r && e.c === p.c)) {
+      triggerLoseHeart('caught'); return
+    }
+
+    // 走進房間中心格
+    const room = roomsRef.current.find(rm => rm.r === p.r && rm.c === p.c)
+    if (!room) return
+
+    const currentItem = items[qIdxRef.current % items.length]
+    if (room.optionIdx === currentItem?.answerIndex) {
+      triggerCorrect()
+    } else {
+      triggerLoseHeart('wrong')
     }
   }
 
-  function startChaseTimer() {
-    clearInterval(chaseTimer.current)
-    chaseTimer.current = setInterval(tickChasers, 1200)
-  }
+  function triggerLoseHeart(reason) {
+    clearInterval(tickRef.current)
+    const next = heartsRef.current - 1
+    heartsRef.current = next
+    setHearts(next)
+    setFlash(reason === 'caught' ? 'caught' : 'wrong')
+    setTimeout(() => setFlash(null), 800)
 
-  // 玩家移動
-  function movePlayer(dr, dc) {
-    if (phase !== 'playing') return
-    const p = playerRef.current
-    const walls = mazeRef.current
-    const wallMap = {
-      '-10': 'top', '10': 'bottom', '0-1': 'left', '01': 'right'
-    }
-    const key = `${dr}${dc}`
-    if (walls[p.r][p.c][wallMap[key]]) return
-    playerRef.current = { r: p.r + dr, c: p.c + dc }
-    draw()
-    // 到終點
-    const ex = exitRef.current
-    if (playerRef.current.r === ex.r && playerRef.current.c === ex.c) {
-      clearInterval(chaseTimer.current)
-      setPhase('win')
+    if (next <= 0) {
+      phaseRef.current = 'result'
+      setPhase('result')
+      if (onFinish) onFinish(score, items.length)
       return
     }
-    // 答題觸發（每移動 N 步觸發一題）— 這裡改為：玩家主動走到追兵也觸發
+
+    // 重置位置，短暫停頓後繼續
+    playerRef.current  = { ...PLAYER_START }
+    enemiesRef.current = enemiesRef.current.map((_, i) => {
+      const allRoomKeys = new Set(getActiveRooms(items[qIdxRef.current % items.length]).flatMap(rm => [...roomCells(rm)]))
+      const valid = ENEMY_CANDIDATES.filter(pos => {
+        if (allRoomKeys.has(`${pos.r},${pos.c}`)) return false
+        return bfsDist(wallsRef.current, pos.r, pos.c, PLAYER_START.r, PLAYER_START.c) > 4
+      }).sort(() => Math.random() - 0.5)
+      return valid[i % valid.length] || ENEMY_CANDIDATES[i]
+    })
+    draw()
+    setTimeout(() => { if (phaseRef.current === 'playing') startTick() }, 1500)
   }
 
-  // 鍵盤
+  function triggerCorrect() {
+    clearInterval(tickRef.current)
+    setFlash('correct')
+    setTimeout(() => setFlash(null), 600)
+    setScore(s => s + 1)
+    const next = qIdxRef.current + 1
+    if (next >= items.length) {
+      phaseRef.current = 'result'
+      setFinished(true)
+      setPhase('result')
+      if (onFinish) onFinish(score + 1, items.length)
+    } else {
+      qIdxRef.current = next
+      setQIdx(next)
+      setTimeout(() => {
+        const newItem = items[next % items.length]
+        initMaze(newItem)
+        draw()
+        startTick()
+      }, 800)
+    }
+  }
+
+  // ── 遊戲主循環 ───────────────────────────────────────────
+  const normalFastRef = useRef(false)  // 普通模式是否處於加速狀態
+
+  function startTick() {
+    clearInterval(tickRef.current)
+    const interval = difficulty === 'hard' ? 700 : difficulty === 'normal' ? 950 : 1300
+
+    function tick() {
+      if (phaseRef.current !== 'playing') return
+      moveEnemies()
+      draw()
+      checkTriggers()
+
+      // 普通模式：根據距離動態切換 interval
+      if (difficulty === 'normal') {
+        const walls  = wallsRef.current
+        const player = playerRef.current
+        const isClose = enemiesRef.current.some(e =>
+          bfsDist(walls, e.r, e.c, player.r, player.c) <= CHASE_RADIUS
+        )
+        const shouldFast = isClose
+        if (shouldFast !== normalFastRef.current) {
+          normalFastRef.current = shouldFast
+          clearInterval(tickRef.current)
+          const newInterval = shouldFast ? 550 : 950
+          tickRef.current = setInterval(tick, newInterval)
+        }
+      }
+    }
+
+    tickRef.current = setInterval(tick, interval)
+  }
+
+  // ── 玩家移動 ─────────────────────────────────────────────
+  const movePlayer = useCallback((dr, dc) => {
+    if (phaseRef.current !== 'playing') return
+    const walls = wallsRef.current
+    if (!walls) return
+    const p   = playerRef.current
+    const wMap = { '-10':'top','10':'bottom','0-1':'left','01':'right' }
+    const wall = wMap[`${dr}${dc}`]
+    if (walls[p.r][p.c][wall]) return
+    let nr = p.r + dr, nc = p.c + dc
+    // 穿越通道：超出邊界時 wrap
+    if (nr < 0)     nr = ROWS - 1
+    if (nr >= ROWS) nr = 0
+    if (nc < 0)     nc = COLS - 1
+    if (nc >= COLS) nc = 0
+    playerRef.current = { r: nr, c: nc }
+    draw()
+    checkTriggers()
+  }, [draw])
+
+  // ── 鍵盤 ─────────────────────────────────────────────────
   useEffect(() => {
-    const handler = (e) => {
-      const map = { ArrowUp: [-1,0], ArrowDown: [1,0], ArrowLeft: [0,-1], ArrowRight: [0,1] }
-      if (map[e.key]) { e.preventDefault(); movePlayer(...map[e.key]) }
+    const handler = e => {
+      const MAP = {
+        ArrowUp:[-1,0], ArrowDown:[1,0], ArrowLeft:[0,-1], ArrowRight:[0,1],
+        w:[-1,0], s:[1,0], a:[0,-1], d:[0,1],
+      }
+      if (MAP[e.key]) { e.preventDefault(); movePlayer(...MAP[e.key]) }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [phase])
+  }, [movePlayer])
 
-  // 開始遊戲
+  // ── 觸控滑動 ─────────────────────────────────────────────
+  const touchStart = useRef(null)
+  function onTouchStart(e) {
+    touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+  }
+  function onTouchEnd(e) {
+    if (!touchStart.current) return
+    const dx = e.changedTouches[0].clientX - touchStart.current.x
+    const dy = e.changedTouches[0].clientY - touchStart.current.y
+    touchStart.current = null
+    if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return
+    if (Math.abs(dx) > Math.abs(dy)) movePlayer(0, dx > 0 ? 1 : -1)
+    else movePlayer(dy > 0 ? 1 : -1, 0)
+  }
+
+  // ── 開始遊戲 ─────────────────────────────────────────────
   function startGame() {
-    initMaze()
-    setPhase('playing')
-    setQIdx(0)
+    const wasFinished = phaseRef.current === 'result'
+    clearInterval(tickRef.current)
+    heartsRef.current = maxHearts
+    qIdxRef.current   = 0
+    phaseRef.current  = 'playing'
+    setHearts(maxHearts)
     setScore(0)
-    setMistakes(0)
-    setFeedback(null)
+    setQIdx(0)
+    setFinished(false)
+    setFlash(null)
+    setPhase('playing')
+    const firstItem = items[0]
+    initMaze(firstItem)
+    requestAnimationFrame(() => { draw(); startTick() })
+    if (wasFinished && onRestart) onRestart()
   }
 
   useEffect(() => {
-    if (phase === 'playing') {
-      draw()
-      startChaseTimer()
-      // 一開始先問一題
-      setTimeout(() => {
-        clearInterval(chaseTimer.current)
-        setPhase('question')
-      }, 800)
-    }
-    return () => clearInterval(chaseTimer.current)
-  }, [phase === 'playing'])
+    return () => clearInterval(tickRef.current)
+  }, [])
 
-  // 答題
-  function handleAnswer(optIdx) {
-    if (selected !== null) return
-    setSelected(optIdx)
-    const item = items[qIdx % items.length]
-    const correct = optIdx === item.answerIndex
-    setFeedback(correct ? 'correct' : 'wrong')
-    if (correct) setScore(s => s + 1)
-    else setMistakes(m => m + 1)
+  // ── Flash overlay ─────────────────────────────────────────
+  const flashStyle = flash ? {
+    position:'absolute', inset:0, borderRadius:'var(--radius-md)',
+    background: flash==='correct' ? 'rgba(29,158,117,0.25)' : 'rgba(226,75,74,0.25)',
+    pointerEvents:'none', zIndex:10,
+    animation: 'flashAnim 0.6s ease-out forwards',
+  } : null
 
-    setTimeout(() => {
-      setSelected(null)
-      setFeedback(null)
-      setQIdx(i => i + 1)
-      if (correct) {
-        // 答對：追兵後退一步（重生到遠角）
-        const ex = exitRef.current
-        chasersRef.current = [
-          { r: 0, c: 0 },
-          { r: ex.r, c: 0 },
-        ]
-      }
-      setPhase('playing')
-    }, 1000)
-  }
-
-  const item = items[qIdx % items.length]
-
-  // ── 渲染 ──────────────────────────────────────────────────
+  // ── 介紹畫面 ─────────────────────────────────────────────
   if (phase === 'intro') {
+    const diffLabel = { easy:'簡單', normal:'普通', hard:'困難' }[difficulty]
     return (
-      <div className="card" style={{ textAlign: 'center', padding: '2rem' }}>
-        <div style={{ fontSize: 48, marginBottom: 8 }}>🏃</div>
-        <p style={{ fontSize: 18, fontWeight: 500, marginBottom: 8 }}>迷宮追逐</p>
-        <p style={{ color: 'var(--c-text-muted)', fontSize: 14, marginBottom: '1.5rem', lineHeight: 1.6 }}>
-          用方向鍵移動角色，逃離追兵！<br />
-          被追上時要回答問題，答對追兵退後，答錯追兵繼續追。<br />
-          到達 🏁 終點就過關！
+      <div className="card" style={{ textAlign:'center', padding:'2rem' }}>
+        <div style={{ fontSize:48, marginBottom:8 }}>🏃</div>
+        <p style={{ fontSize:18, fontWeight:500, marginBottom:10 }}>迷宮追逐</p>
+        <div style={{ display:'flex', gap:8, justifyContent:'center', marginBottom:14, flexWrap:'wrap' }}>
+          <span className="tag tag-blue">{diffLabel}</span>
+          <span className="tag tag-gray">敵人 {enemyCount} 隻</span>
+          <span className="tag tag-gray">❤️ × {maxHearts}</span>
+          <span className="tag tag-green">{items.length} 題</span>
+        </div>
+        <p style={{ color:'var(--c-text-muted)', fontSize:14, lineHeight:1.8, marginBottom:'1.5rem' }}>
+          走進迷宮中正確答案的房間即可過關<br/>
+          走進錯誤房間或被敵人抓到會扣愛心<br/>
+          方向鍵 / WASD / 螢幕滑動移動
         </p>
-        <button className="btn-primary" onClick={startGame} style={{ padding: '12px 40px', fontSize: 16 }}>
+        <button className="btn-primary" onClick={startGame} style={{ padding:'12px 40px', fontSize:16 }}>
           開始遊戲
         </button>
       </div>
     )
   }
 
-  if (phase === 'win') {
+  // ── 結果畫面 ─────────────────────────────────────────────
+  if (phase === 'result') {
     return (
-      <div className="card" style={{ textAlign: 'center', padding: '2.5rem 1rem' }}>
-        <div style={{ fontSize: 52, marginBottom: 8 }}>🎉</div>
-        <p style={{ fontSize: 20, fontWeight: 500, marginBottom: 4 }}>成功逃脫！</p>
-        <p style={{ color: 'var(--c-text-muted)', marginBottom: '1.5rem' }}>
-          答對 {score} 題 · 答錯 {mistakes} 題
+      <div className="card" style={{ textAlign:'center', padding:'2.5rem 1rem' }}>
+        <div style={{ fontSize:52, marginBottom:8 }}>{finished ? '🎉' : '💔'}</div>
+        <p style={{ fontSize:20, fontWeight:500, marginBottom:4 }}>
+          {finished ? '全部通關！' : '遊戲結束'}
         </p>
-        <button className="btn-primary" onClick={startGame} style={{ padding: '10px 32px' }}>
+        <p style={{ color:'var(--c-text-muted)', marginBottom:'1.5rem' }}>
+          答對 {score} / {items.length} 題
+        </p>
+        <button className="btn-primary" onClick={startGame} style={{ padding:'10px 32px' }}>
           <i className="ti ti-refresh" aria-hidden="true" /> 再玩一次
         </button>
       </div>
     )
   }
 
+  // ── 遊戲畫面 ─────────────────────────────────────────────
+  const currentItem = items[qIdx % items.length]
   return (
     <div>
-      {/* 迷宮畫布 */}
-      {phase === 'playing' && (
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--c-text-muted)', marginBottom: 6 }}>
-            <span>✓ 答對 {score}</span>
-            <span>✗ 答錯 {mistakes}</span>
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <canvas
-              ref={canvasRef}
-              width={COLS * CELL}
-              height={ROWS * CELL}
-              style={{ display: 'block', border: '1px solid var(--c-border)', borderRadius: 'var(--radius-md)' }}
-            />
-          </div>
-          {/* 行動按鈕（手機用） */}
-          <div style={styles.dpad}>
-            <div />
-            <button style={styles.dpadBtn} onClick={() => movePlayer(-1, 0)}>▲</button>
-            <div />
-            <button style={styles.dpadBtn} onClick={() => movePlayer(0, -1)}>◀</button>
-            <div />
-            <button style={styles.dpadBtn} onClick={() => movePlayer(0, 1)}>▶</button>
-            <div />
-            <button style={styles.dpadBtn} onClick={() => movePlayer(1, 0)}>▼</button>
-            <div />
-          </div>
-          <p style={{ fontSize: 12, color: 'var(--c-text-hint)', textAlign: 'center', marginTop: 4 }}>
-            鍵盤方向鍵或點上方按鈕移動
-          </p>
-        </div>
-      )}
+      <style>{`@keyframes flashAnim { from { opacity:1 } to { opacity:0 } }`}</style>
 
-      {/* 答題 */}
-      {phase === 'question' && item && (
-        <div>
-          <div style={styles.caughtBanner}>
-            <i className="ti ti-alert-triangle" aria-hidden="true" /> 被追上了！回答問題才能繼續
-          </div>
-          <div className="card" style={{ marginBottom: '0.75rem' }}>
-            <p style={{ fontSize: 17, fontWeight: 500 }}>{item.question}</p>
-          </div>
-          {item.options.map((opt, optIdx) => {
-            let bg = 'var(--c-surface)', border = 'var(--c-border)', color = 'var(--c-text)'
-            if (feedback) {
-              if (optIdx === item.answerIndex) { bg = 'var(--c-success-bg)'; border = 'var(--c-success)'; color = '#27500A' }
-              else if (optIdx === selected)    { bg = 'var(--c-danger-bg)';  border = 'var(--c-danger)';  color = '#791F1F' }
-            } else if (selected === optIdx) {
-              bg = 'var(--c-primary-bg)'; border = 'var(--c-primary)'; color = '#0C447C'
-            }
-            return (
-              <div
-                key={optIdx}
-                onClick={() => handleAnswer(optIdx)}
-                style={{ ...styles.option, background: bg, borderColor: border, color, cursor: selected !== null ? 'default' : 'pointer' }}
-              >
-                <span style={{ ...styles.optLetter, borderColor: border, color }}>{['A','B','C','D'][optIdx]}</span>
-                {opt}
-              </div>
-            )
-          })}
-          {feedback && (
-            <div style={{
-              padding: '10px 14px', borderRadius: 'var(--radius-md)', fontSize: 14, fontWeight: 500,
-              marginTop: 8, display: 'flex', alignItems: 'center', gap: 6,
-              background: feedback === 'correct' ? 'var(--c-success-bg)' : 'var(--c-danger-bg)',
-              color:      feedback === 'correct' ? '#27500A' : '#791F1F',
-            }}>
-              <i className={`ti ti-${feedback === 'correct' ? 'circle-check' : 'circle-x'}`} aria-hidden="true" />
-              {feedback === 'correct' ? '答對！追兵後退，繼續逃！' : `答錯了，正確是「${item.options[item.answerIndex]}」`}
-            </div>
-          )}
-        </div>
-      )}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+        <Hearts total={maxHearts} remaining={hearts} />
+        <span style={{ fontSize:13, color:'var(--c-text-muted)' }}>
+          第 {qIdx+1} / {items.length} 題
+        </span>
+      </div>
+
+      <div className="card" style={{ padding:'10px 14px', marginBottom:10, textAlign:'center' }}>
+        <p style={{ fontSize:16, fontWeight:500, lineHeight:1.5 }}>
+          {currentItem?.question}
+        </p>
+      </div>
+
+      <div style={{ position:'relative', display:'inline-block', width:'100%', overflowX:'auto' }}>
+        {flashStyle && <div style={flashStyle} />}
+        <canvas
+          ref={canvasRef}
+          width={COLS * CELL}
+          height={ROWS * CELL}
+          style={{ display:'block', margin:'0 auto', borderRadius:'var(--radius-md)', border:'2px solid #333' }}
+          onTouchStart={onTouchStart}
+          onTouchEnd={onTouchEnd}
+        />
+      </div>
+
+      {/* 方向鍵 */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,44px)', gridTemplateRows:'repeat(3,44px)', gap:4, margin:'10px auto 0', width:'fit-content' }}>
+        {[
+          [null,                    () => movePlayer(-1,0), null                   ],
+          [() => movePlayer(0,-1),  null,                   () => movePlayer(0, 1) ],
+          [null,                    () => movePlayer( 1,0), null                   ],
+        ].map((row, ri) =>
+          row.map((fn, ci) =>
+            fn
+              ? <button key={`${ri}-${ci}`} onClick={fn}
+                  style={{ width:44, height:44, fontSize:18, display:'flex', alignItems:'center', justifyContent:'center', padding:0, borderRadius:'var(--radius-sm)' }}>
+                  {ri===0?'▲':ri===2?'▼':ci===0?'◀':'▶'}
+                </button>
+              : <div key={`${ri}-${ci}`} />
+          )
+        )}
+      </div>
+      <p style={{ fontSize:11, color:'var(--c-text-hint)', textAlign:'center', marginTop:4 }}>
+        方向鍵 / WASD / 滑動螢幕移動
+      </p>
     </div>
   )
-}
-
-const styles = {
-  dpad: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, 44px)',
-    gridTemplateRows: 'repeat(3, 44px)',
-    gap: 4,
-    margin: '10px auto 0',
-    width: 'fit-content',
-  },
-  dpadBtn: {
-    width: 44,
-    height: 44,
-    fontSize: 18,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 0,
-    borderRadius: 'var(--radius-sm)',
-    background: 'var(--c-surface)',
-  },
-  caughtBanner: {
-    padding: '10px 14px',
-    background: 'var(--c-danger-bg)',
-    color: '#791F1F',
-    borderRadius: 'var(--radius-md)',
-    fontSize: 14,
-    fontWeight: 500,
-    marginBottom: 12,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-  },
-  option: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    padding: '12px 14px',
-    border: '1.5px solid',
-    borderRadius: 'var(--radius-md)',
-    marginBottom: 8,
-    transition: 'all 0.12s',
-    fontSize: 15,
-    userSelect: 'none',
-  },
-  optLetter: {
-    width: 26, height: 26,
-    borderRadius: '50%',
-    border: '1.5px solid',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: 11, fontWeight: 700, flexShrink: 0,
-  },
 }
