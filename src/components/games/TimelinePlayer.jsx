@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef } from 'react'
+import ResultScreen from '../ResultScreen.jsx'
 
 function shuffle(arr) {
   const a=[...arr]; for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]} return a
@@ -47,10 +48,8 @@ export default function TimelinePlayer({ activity, onFinish, onRestart }) {
   function handleRestart() { setOrder(shuffle(correct)); setChecked(false); setFinished(false); setMistakes(0); if (onRestart) onRestart() }
 
   if(finished) return (
-    <div className="card" style={{ textAlign:'center', padding:'2.5rem 1rem' }}>
-      <div style={{ fontSize:48, marginBottom:8 }}>{mistakes===0?'🎉':mistakes<=2?'👍':'💪'}</div>
-      <p style={{ fontSize:20, fontWeight:500, marginBottom:4 }}>排序正確！</p>
-      <p style={{ color:'var(--c-text-muted)', marginBottom:'1.5rem' }}>{mistakes===0?'一次就排對了！':`試了 ${mistakes+1} 次`}</p>
+    <ResultScreen score={items.length} total={items.length} mistakes={mistakes} onRestart={handleRestart}
+      perfectMessage="排序正確！" perfectSubtitle="一次就排對了！" mistakeLabel="嘗試錯誤">
       <div style={{ textAlign:'left', marginBottom:'1.5rem' }}>
         {correct.map((text,i) => (
           <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:'1px solid var(--c-border)' }}>
@@ -59,10 +58,7 @@ export default function TimelinePlayer({ activity, onFinish, onRestart }) {
           </div>
         ))}
       </div>
-      <button className="btn-primary" onClick={handleRestart} style={{ padding:'10px 32px' }}>
-        <i className="ti ti-refresh" aria-hidden="true" /> 再玩一次
-      </button>
-    </div>
+    </ResultScreen>
   )
 
   return (

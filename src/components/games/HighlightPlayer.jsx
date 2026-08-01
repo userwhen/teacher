@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import ResultScreen from '../ResultScreen.jsx'
 
 function tokenize(passage, answers) {
   if (!answers.length) return [{ text: passage, clickable: false }]
@@ -15,6 +16,7 @@ function tokenize(passage, answers) {
 
 export default function HighlightPlayer({ activity, onFinish, onRestart }) {
   const items = activity.items || []
+  const difficulty = activity.meta?.difficulty || 'easy'
   const [current, setCurrent]       = useState(0)
   const [found, setFound]           = useState([])
   const [wrongFlash, setWrongFlash] = useState(false)
@@ -39,22 +41,16 @@ export default function HighlightPlayer({ activity, onFinish, onRestart }) {
         }, 600)
       }
     } else {
-      setMistakes(m=>m+1); setWrongFlash(true)
-      setTimeout(() => setWrongFlash(false), 500)
+      setMistakes(m=>m+1)
+      if (difficulty === 'easy') { setWrongFlash(true); setTimeout(() => setWrongFlash(false), 500) }
     }
   }
 
   function handleRestart() { setCurrent(0); setFound([]); setWrongFlash(false); setFinished(false); setMistakes(0); setPagesDone(0); if (onRestart) onRestart() }
 
   if (finished) return (
-    <div className="card" style={{ textAlign:'center', padding:'2.5rem 1rem' }}>
-      <div style={{ fontSize:48, marginBottom:8 }}>{mistakes===0?'🎉':mistakes<=3?'👍':'💪'}</div>
-      <p style={{ fontSize:20, fontWeight:500, marginBottom:4 }}>全部找到了！</p>
-      <p style={{ color:'var(--c-text-muted)', marginBottom:'1.5rem' }}>{mistakes===0?'零失誤，閱讀力超強！':`點錯 ${mistakes} 次`}</p>
-      <button className="btn-primary" onClick={handleRestart} style={{ padding:'10px 32px' }}>
-        <i className="ti ti-refresh" aria-hidden="true" /> 再玩一次
-      </button>
-    </div>
+    <ResultScreen score={items.length} total={items.length} mistakes={mistakes} onRestart={handleRestart}
+      perfectMessage="全部找到了！" perfectSubtitle="零失誤，閱讀力超強！" mistakeLabel="點錯" />
   )
 
   return (

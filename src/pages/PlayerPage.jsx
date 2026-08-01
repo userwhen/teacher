@@ -152,7 +152,7 @@ setRestartKey(k => k + 1)
       )}
 
       {/* 成績紀錄 */}
-      {(lastResult || records.length > 0) && (
+      {lastResult && (
         <ScoreBoard records={records} currentIdx={0} />
       )}
     </div>

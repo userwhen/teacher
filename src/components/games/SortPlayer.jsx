@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
+import ResultScreen from '../ResultScreen.jsx'
 
 function shuffle(arr) {
   const a = [...arr]
@@ -9,48 +10,71 @@ function shuffle(arr) {
 export default function SortPlayer({ activity, onFinish, onRestart }) {
   const items      = activity.items || []
   const categories = activity.meta?.categories || []
+  const difficulty = activity.meta?.difficulty || 'easy'
   const pool       = useMemo(() => shuffle(items.map((it, i) => ({ ...it, id: i }))), [])
   const initBuckets = Object.fromEntries(categories.map(c => [c, []]))
-  const [buckets,   setBuckets]   = useState(initBuckets)
-  const [remaining, setRemaining] = useState(pool.map(it => it.id))
-  const [selected,  setSelected]  = useState(null)
-  const [wrong,     setWrong]     = useState([])
-  const [finished,  setFinished]  = useState(false)
-  const [mistakes,  setMistakes]  = useState(0)
+  const [buckets,     setBuckets]     = useState(initBuckets)
+  const [remaining,   setRemaining]   = useState(pool.map(it => it.id))
+  const [wrong,       setWrong]       = useState([])
+  const [finished,    setFinished]    = useState(false)
+  const [mistakes,    setMistakes]    = useState(0)
+  const [dragOverCat, setDragOverCat] = useState(null)   // 目前拖到哪個分類框上方
   const totalPlaced = Object.values(buckets).flat().length
+  const dragId = useRef(null)
 
-  function pickItem(id) { setSelected(selected===id?null:id); setWrong([]) }
-
-  function dropIntoBucket(cat) {
-    if (selected===null) return
-    const item = pool.find(it => it.id===selected)
+  function dropInto(id, cat) {
+    const item = pool.find(it => it.id===id)
     if (!item) return
     if (item.category === cat) {
-      const next = { ...buckets, [cat]: [...buckets[cat], selected] }
-      setBuckets(next); setRemaining(prev => prev.filter(id => id!==selected)); setSelected(null)
+      const next = { ...buckets, [cat]: [...buckets[cat], id] }
+      setBuckets(next)
+      setRemaining(prev => prev.filter(x => x!==id))
       if (totalPlaced+1 === items.length) setTimeout(() => { if(onFinish) onFinish(items.length-mistakes, items.length); setFinished(true) }, 400)
     } else {
-      setMistakes(m => m+1); setWrong([selected])
-      setTimeout(() => { setWrong([]); setSelected(null) }, 700)
+      setMistakes(m => m+1)
+      if (difficulty === 'easy') { setWrong([id]); setTimeout(() => setWrong([]), 700) }
     }
+  }
+
+  // ── 桌面：原生拖曳 ─────────────────────────────────────────
+  function onDragStart(id) { dragId.current = id }
+  function onDragEnd() { dragId.current = null; setDragOverCat(null) }
+  function onDragOverCat(e, cat) { e.preventDefault(); setDragOverCat(cat) }
+  function onDragLeaveCat(cat) { setDragOverCat(prev => prev===cat ? null : prev) }
+  function onDropCat(e, cat) {
+    e.preventDefault()
+    setDragOverCat(null)
+    if (dragId.current === null) return
+    dropInto(dragId.current, cat)
+    dragId.current = null
+  }
+
+  // ── 觸控：手動判斷放開時手指下方的分類 ───────────────────────
+  function onTouchStart(id) { dragId.current = id }
+  function onTouchMove(e) {
+    if (dragId.current === null) return
+    e.preventDefault()
+    const touch = e.touches[0]
+    const el = document.elementFromPoint(touch.clientX, touch.clientY)
+    const cat = el?.closest('[data-cat]')?.dataset.cat
+    setDragOverCat(cat || null)
+  }
+  function onTouchEnd() {
+    if (dragId.current !== null && dragOverCat) dropInto(dragId.current, dragOverCat)
+    dragId.current = null
+    setDragOverCat(null)
   }
 
   function handleRestart() {
     setBuckets(Object.fromEntries(categories.map(c=>[c,[]])))
-    setRemaining(pool.map(it=>it.id)); setSelected(null); setWrong([]); setFinished(false); setMistakes(0)
+    setRemaining(pool.map(it=>it.id)); setWrong([]); setFinished(false); setMistakes(0)
+    dragId.current = null; setDragOverCat(null)
     if (onRestart) onRestart()
   }
 
-  if (finished) return (
-    <div className="card" style={{ textAlign:'center', padding:'2.5rem 1rem' }}>
-      <div style={{ fontSize:48, marginBottom:8 }}>{mistakes===0?'🎉':mistakes<=3?'👍':'💪'}</div>
-      <p style={{ fontSize:20, fontWeight:500, marginBottom:4 }}>分類完成！</p>
-      <p style={{ color:'var(--c-text-muted)', marginBottom:'1.5rem' }}>{mistakes===0?'零失誤，太厲害了！':`分錯 ${mistakes} 次`}</p>
-      <button className="btn-primary" onClick={handleRestart} style={{ padding:'10px 32px' }}>
-        <i className="ti ti-refresh" aria-hidden="true" /> 再玩一次
-      </button>
-    </div>
-  )
+  if (finished) {
+    return <ResultScreen score={items.length} total={items.length} mistakes={mistakes} onRestart={handleRestart} perfectMessage="分類完成！" mistakeLabel="分錯" />
+  }
 
   return (
     <div>
@@ -64,11 +88,16 @@ export default function SortPlayer({ activity, onFinish, onRestart }) {
         {remaining.map(id => {
           const it = pool.find(p=>p.id===id)
           return (
-            <div key={id} onClick={() => pickItem(id)}
-              style={{ padding:'7px 14px', border:`1.5px solid ${wrong.includes(id)?'var(--c-danger)':selected===id?'var(--c-primary)':'var(--c-border)'}`, borderRadius:999,
-                background: wrong.includes(id)?'var(--c-danger-bg)':selected===id?'var(--c-primary-bg)':'var(--c-surface)',
-                color: wrong.includes(id)?'#791F1F':selected===id?'#0C447C':'var(--c-text)',
-                fontSize:14, cursor:'pointer', userSelect:'none', transition:'all 0.12s', fontWeight:selected===id?500:400 }}>
+            <div key={id} draggable
+              onDragStart={() => onDragStart(id)}
+              onDragEnd={onDragEnd}
+              onTouchStart={() => onTouchStart(id)}
+              onTouchMove={onTouchMove}
+              onTouchEnd={onTouchEnd}
+              style={{ padding:'7px 14px', border:`1.5px solid ${wrong.includes(id)?'var(--c-danger)':'var(--c-border)'}`, borderRadius:999,
+                background: wrong.includes(id)?'var(--c-danger-bg)':'var(--c-surface)',
+                color: wrong.includes(id)?'#791F1F':'var(--c-text)',
+                fontSize:14, cursor:'grab', userSelect:'none', touchAction:'none', transition:'all 0.12s' }}>
               {it.text}
             </div>
           )
@@ -76,14 +105,17 @@ export default function SortPlayer({ activity, onFinish, onRestart }) {
         {remaining.length===0 && <p style={{ color:'var(--c-text-hint)', fontSize:13 }}>所有詞語已放入分類</p>}
       </div>
       <p style={{ fontSize:13, color:'var(--c-text-hint)', textAlign:'center', margin:'8px 0 12px' }}>
-        {selected!==null ? `「${pool.find(p=>p.id===selected)?.text}」→ 點下方分類放入` : '點選詞語，再點分類桶放入'}
+        抓著詞語拖曳到下方對應的分類框
       </p>
       <div style={{ display:'grid', gridTemplateColumns:`repeat(${Math.min(categories.length,3)},1fr)`, gap:10 }}>
         {categories.map(cat => (
-          <div key={cat} onClick={() => dropIntoBucket(cat)}
-            style={{ border:`1.5px ${selected!==null?'solid':'dashed'} ${selected!==null?'var(--c-primary)':'var(--c-border)'}`,
-              borderRadius:'var(--radius-md)', padding:10, minHeight:100, cursor:selected!==null?'pointer':'default',
-              background:selected!==null?'var(--c-primary-bg)':'var(--c-surface)', transition:'all 0.12s' }}>
+          <div key={cat} data-cat={cat}
+            onDragOver={e => onDragOverCat(e, cat)}
+            onDragLeave={() => onDragLeaveCat(cat)}
+            onDrop={e => onDropCat(e, cat)}
+            style={{ border:`1.5px ${dragOverCat===cat?'solid':'dashed'} ${dragOverCat===cat?'var(--c-primary)':'var(--c-border)'}`,
+              borderRadius:'var(--radius-md)', padding:10, minHeight:100,
+              background:dragOverCat===cat?'var(--c-primary-bg)':'var(--c-surface)', transition:'all 0.12s' }}>
             <p style={{ fontSize:13, fontWeight:600, color:'var(--c-text-muted)', marginBottom:8, textAlign:'center' }}>{cat}</p>
             <div style={{ display:'flex', flexWrap:'wrap', gap:5, minHeight:36 }}>
               {buckets[cat].map(id => {

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import ResultScreen from '../ResultScreen.jsx'
 
 function shuffle(arr) {
   const a = [...arr]
@@ -15,6 +16,7 @@ function shuffle(arr) {
 
 export default function AnagramPlayer({ activity, onFinish, onRestart }) {
   const items = (activity.items || []).filter(it => it.answer?.length >= 2)
+  const difficulty = activity.meta?.difficulty || 'easy'
 
   const [current, setCurrent]   = useState(0)
   const [score,   setScore]     = useState(0)
@@ -79,19 +81,7 @@ export default function AnagramPlayer({ activity, onFinish, onRestart }) {
   }
 
   if (finished) {
-    const pct = Math.round((score / items.length) * 100)
-    return (
-      <div className="card" style={{ textAlign:'center', padding:'2.5rem 1rem' }}>
-        <div style={{ fontSize:48, marginBottom:8 }}>{pct===100?'🎉':pct>=60?'👍':'💪'}</div>
-        <p style={{ fontSize:20, fontWeight:500, marginBottom:4 }}>
-          答對 {score} / {items.length} 題
-        </p>
-        <p style={{ color:'var(--c-text-muted)', marginBottom:'1.5rem' }}>正確率 {pct}%</p>
-        <button className="btn-primary" onClick={handleRestart} style={{ padding:'10px 32px' }}>
-          <i className="ti ti-refresh" aria-hidden="true" /> 再玩一次
-        </button>
-      </div>
-    )
+    return <ResultScreen score={score} total={items.length} mistakes={mistakes} onRestart={handleRestart} />
   }
 
   if (!item) return (
@@ -102,6 +92,7 @@ export default function AnagramPlayer({ activity, onFinish, onRestart }) {
 
   const pickedIds = new Set(picked.map(t => t.id))
   const composed  = picked.map(t => t.ch).join('')
+  const showResult = difficulty === 'easy' ? status : null
 
   return (
     <div>
@@ -127,8 +118,8 @@ export default function AnagramPlayer({ activity, onFinish, onRestart }) {
           const t = picked[i]
           let bg = 'var(--c-bg)', border = '2px dashed var(--c-border)', color = 'var(--c-text)'
           if (t) {
-            if (status === 'correct') { bg = 'var(--c-success-bg)'; border = '2px solid var(--c-success)'; color = '#27500A' }
-            else if (status === 'wrong') { bg = 'var(--c-danger-bg)'; border = '2px solid var(--c-danger)'; color = '#791F1F' }
+            if (showResult === 'correct') { bg = 'var(--c-success-bg)'; border = '2px solid var(--c-success)'; color = '#27500A' }
+            else if (showResult === 'wrong') { bg = 'var(--c-danger-bg)'; border = '2px solid var(--c-danger)'; color = '#791F1F' }
             else { bg = 'var(--c-primary-bg)'; border = '2px solid var(--c-primary)'; color = '#0C447C' }
           }
           return (
@@ -147,15 +138,15 @@ export default function AnagramPlayer({ activity, onFinish, onRestart }) {
       </div>
 
       {/* 回饋 */}
-      {status && (
+      {showResult && (
         <div style={{
           padding:'10px 14px', borderRadius:'var(--radius-md)', fontSize:14, fontWeight:500,
           marginBottom:12, display:'flex', alignItems:'center', gap:6,
-          background: status==='correct' ? 'var(--c-success-bg)' : 'var(--c-danger-bg)',
-          color:      status==='correct' ? '#27500A' : '#791F1F',
+          background: showResult==='correct' ? 'var(--c-success-bg)' : 'var(--c-danger-bg)',
+          color:      showResult==='correct' ? '#27500A' : '#791F1F',
         }}>
-          <i className={`ti ti-${status==='correct'?'circle-check':'circle-x'}`} aria-hidden="true" />
-          {status === 'correct' ? '答對了！' : '順序不對，再試一次'}
+          <i className={`ti ti-${showResult==='correct'?'circle-check':'circle-x'}`} aria-hidden="true" />
+          {showResult === 'correct' ? '答對了！' : '順序不對，再試一次'}
         </div>
       )}
 

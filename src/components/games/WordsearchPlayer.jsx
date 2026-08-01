@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef } from 'react'
+import ResultScreen from '../ResultScreen.jsx'
 
 // ── 字格生成 ─────────────────────────────────────────────────
 const DIRS = [
@@ -137,12 +138,8 @@ export default function WordsearchPlayer({ activity, onFinish, onRestart }) {
     return map
   }, [found])
 
-  const matchOptions = useMemo(() => {
-    if (!pendingMatch) return []
-    const correctVal = wordMatchMap[pendingMatch]
-    const distractors = shuffle(rawWords.filter(w => w !== pendingMatch).map(w => wordMatchMap[w])).slice(0, 3)
-    return shuffle([correctVal, ...distractors])
-  }, [pendingMatch])
+  const shuffledMatches = useMemo(() => shuffle(rawWords.map(w => wordMatchMap[w])), [])
+  const usedMatches = useMemo(() => new Set([...found].map(w => wordMatchMap[w])), [found])
 
   function loseHeart() {
     setMistakes(m => m + 1)
@@ -185,6 +182,7 @@ export default function WordsearchPlayer({ activity, onFinish, onRestart }) {
   }
 
   function pickMatchOption(val) {
+    if (!pendingMatch) return
     if (val === wordMatchMap[pendingMatch]) {
       const next = new Set([...found, pendingMatch])
       setFound(next)
@@ -251,16 +249,8 @@ export default function WordsearchPlayer({ activity, onFinish, onRestart }) {
 
   if (finished || gameOver) {
     return (
-      <div className="card" style={{ textAlign:'center', padding:'2.5rem 1rem' }}>
-        <div style={{ fontSize:48, marginBottom:8 }}>{gameOver ? '💔' : (mistakes===0?'🎉':mistakes<=5?'👍':'💪')}</div>
-        <p style={{ fontSize:20, fontWeight:500, marginBottom:4 }}>{gameOver ? '愛心用完了' : '所有詞語都找到了！'}</p>
-        <p style={{ color:'var(--c-text-muted)', marginBottom:'1.5rem' }}>
-          找到 {found.size} / {validPlaced.length} 個{gameOver ? '' : (mistakes===0?'，零失誤，太厲害了！':`，嘗試錯誤 ${mistakes} 次`)}
-        </p>
-        <button className="btn-primary" onClick={handleRestart} style={{ padding:'10px 32px' }}>
-          <i className="ti ti-refresh" aria-hidden="true" /> 再玩一次
-        </button>
-      </div>
+      <ResultScreen score={found.size} total={validPlaced.length} mistakes={gameOver ? null : mistakes} onRestart={handleRestart}
+        failed={gameOver} failMessage="愛心用完了" perfectMessage="所有詞語都找到了！" mistakeLabel="嘗試錯誤" scoreLabel="找到" />
     )
   }
 
@@ -319,73 +309,84 @@ export default function WordsearchPlayer({ activity, onFinish, onRestart }) {
         </div>
       )}
 
-      {/* 配對確認面板 */}
-      {pendingMatch && (
-        <div className="card" style={{ marginBottom:12, padding:'0.875rem', border:'1.5px solid var(--c-primary)' }}>
-          <p style={{ fontSize:13, fontWeight:500, marginBottom:8, textAlign:'center' }}>
-            找到「{pendingMatch}」了！它對應哪一個？
-          </p>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(90px,1fr))', gap:8 }}>
-            {matchOptions.map((opt, i) => (
-              <div key={i} onClick={() => pickMatchOption(opt)}
-                style={{
-                  padding:8, borderRadius:'var(--radius-sm)', textAlign:'center', cursor:'pointer',
-                  border: `1.5px solid ${wrongOption===opt ? 'var(--c-danger)' : 'var(--c-border)'}`,
-                  background: wrongOption===opt ? 'var(--c-danger-bg)' : 'var(--c-surface)',
-                  transition:'all 0.12s',
-                }}>
-                {isImageUrl(opt)
-                  ? <img src={opt} alt="" style={{ width:'100%', height:60, objectFit:'cover', borderRadius:4 }} />
-                  : <span style={{ fontSize:14 }}>{opt}</span>}
-              </div>
-            ))}
-          </div>
-        </div>
+      {/* 配對模式：找到詞語後的提示 */}
+      {matchMode && pendingMatch && (
+        <p style={{ fontSize:13, fontWeight:500, color:'var(--c-primary)', textAlign:'center', marginBottom:8 }}>
+          找到「{pendingMatch}」了！點右邊對應的內容
+        </p>
       )}
 
-      {/* 字格 */}
-      <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch', opacity: pendingMatch ? 0.4 : 1, pointerEvents: pendingMatch ? 'none' : 'auto' }}>
-        <div
-          ref={gridRef}
-          onMouseLeave={() => { if(isSelecting.current) confirmSelection() }}
-          onMouseUp={onMouseUp}
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
-          style={{
-            display:'inline-grid',
-            gridTemplateColumns:`repeat(${size}, ${CELL_SIZE}px)`,
-            gap:2,
-            userSelect:'none',
-            cursor:'crosshair',
-            padding:4,
-          }}
-        >
-          {grid.map((row, r) =>
-            row.map((char, c) => (
-              <div
-                key={`${r}-${c}`}
-                data-r={r} data-c={c}
-                onMouseDown={() => onMouseDown(r, c)}
-                onMouseEnter={() => onMouseEnter(r, c)}
-                style={{
-                  width: CELL_SIZE, height: CELL_SIZE,
-                  display:'flex', alignItems:'center', justifyContent:'center',
-                  fontSize: isChinese ? 15 : 13,
-                  fontWeight: 500,
-                  borderRadius: 4,
-                  background: cellBg(r, c),
-                  color: cellColor(r, c),
-                  border: cellBorder(r, c),
-                  transition:'background 0.08s, color 0.08s',
-                  pointerEvents:'auto',
-                }}
-              >
-                {char}
-              </div>
-            ))
-          )}
+      {/* 字格 + 配對面板 */}
+      <div style={{ display:'flex', gap:12, alignItems:'flex-start' }}>
+        <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
+          <div
+            ref={gridRef}
+            onMouseLeave={() => { if(isSelecting.current) confirmSelection() }}
+            onMouseUp={onMouseUp}
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+            style={{
+              display:'inline-grid',
+              gridTemplateColumns:`repeat(${size}, ${CELL_SIZE}px)`,
+              gap:2,
+              userSelect:'none',
+              cursor:'crosshair',
+              padding:4,
+            }}
+          >
+            {grid.map((row, r) =>
+              row.map((char, c) => (
+                <div
+                  key={`${r}-${c}`}
+                  data-r={r} data-c={c}
+                  onMouseDown={() => onMouseDown(r, c)}
+                  onMouseEnter={() => onMouseEnter(r, c)}
+                  style={{
+                    width: CELL_SIZE, height: CELL_SIZE,
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    fontSize: isChinese ? 15 : 13,
+                    fontWeight: 500,
+                    borderRadius: 4,
+                    background: cellBg(r, c),
+                    color: cellColor(r, c),
+                    border: cellBorder(r, c),
+                    transition:'background 0.08s, color 0.08s',
+                    pointerEvents:'auto',
+                  }}
+                >
+                  {char}
+                </div>
+              ))
+            )}
+          </div>
         </div>
+
+        {/* 右側：配對內容（配對模式才顯示） */}
+        {matchMode && (
+          <div style={{ display:'flex', flexDirection:'column', gap:6, width:120, flexShrink:0 }}>
+            <p style={{ fontSize:11, color:'var(--c-text-hint)', textAlign:'center', marginBottom:2 }}>對應內容</p>
+            {shuffledMatches.map((opt, i) => {
+              const isUsed  = usedMatches.has(opt)
+              const isWrong = wrongOption === opt
+              return (
+                <div key={i} onClick={() => !isUsed && pickMatchOption(opt)}
+                  style={{
+                    padding:7, borderRadius:'var(--radius-sm)', textAlign:'center',
+                    cursor: isUsed ? 'default' : 'pointer',
+                    opacity: isUsed ? 0.45 : 1,
+                    border: `1.5px solid ${isWrong ? 'var(--c-danger)' : isUsed ? 'var(--c-success)' : 'var(--c-border)'}`,
+                    background: isWrong ? 'var(--c-danger-bg)' : isUsed ? 'var(--c-success-bg)' : 'var(--c-surface)',
+                    transition:'all 0.12s',
+                  }}>
+                  {isImageUrl(opt)
+                    ? <img src={opt} alt="" style={{ width:'100%', height:50, objectFit:'cover', borderRadius:4 }} />
+                    : <span style={{ fontSize:13 }}>{opt}</span>}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       <p style={{ fontSize:12, color:'var(--c-text-hint)', textAlign:'center', marginTop:8 }}>

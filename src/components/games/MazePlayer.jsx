@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import ResultScreen from '../ResultScreen.jsx'
 
 // ── 常數 ─────────────────────────────────────────────────────
 const COLS = 15
@@ -647,18 +648,8 @@ export default function MazePlayer({ activity, onFinish, onRestart }) {
   // ── 結果畫面 ─────────────────────────────────────────────
   if (phase === 'result') {
     return (
-      <div className="card" style={{ textAlign:'center', padding:'2.5rem 1rem' }}>
-        <div style={{ fontSize:52, marginBottom:8 }}>{finished ? '🎉' : '💔'}</div>
-        <p style={{ fontSize:20, fontWeight:500, marginBottom:4 }}>
-          {finished ? '全部通關！' : '遊戲結束'}
-        </p>
-        <p style={{ color:'var(--c-text-muted)', marginBottom:'1.5rem' }}>
-          答對 {score} / {items.length} 題
-        </p>
-        <button className="btn-primary" onClick={startGame} style={{ padding:'10px 32px' }}>
-          <i className="ti ti-refresh" aria-hidden="true" /> 再玩一次
-        </button>
-      </div>
+      <ResultScreen score={score} total={items.length} onRestart={startGame}
+        failed={!finished} failMessage="遊戲結束" perfectMessage="全部通關！" />
     )
   }
 

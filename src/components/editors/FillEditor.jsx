@@ -2,11 +2,33 @@ import useStore from '../../store/useStore.js'
 import { emptyItem } from '../../utils/schema.js'
 
 export default function FillEditor() {
-  const { draft, updateDraftItem, addDraftItem, removeDraftItem } = useStore()
+  const { draft, updateDraftItem, addDraftItem, removeDraftItem, updateDraftMeta } = useStore()
   const items = draft?.items || []
+  const difficulty = draft?.meta?.difficulty || 'easy'
 
   return (
     <div>
+      {/* 難度選擇 */}
+      <div className="card" style={{ background:'var(--c-bg)', padding:'0.875rem', marginBottom:'0.75rem' }}>
+        <p className="label" style={{ marginBottom:8 }}>難度</p>
+        <div style={{ display:'flex', gap:8 }}>
+          {[
+            { key:'easy', label:'簡單', desc:'答錯會提示對錯' },
+            { key:'hard', label:'困難', desc:'答錯不會提示，直接下一題' },
+          ].map(({ key, label, desc }) => (
+            <div key={key} onClick={() => updateDraftMeta('difficulty', key)} style={{
+              flex:1, display:'flex', flexDirection:'column', padding:'10px 14px',
+              border:`1.5px solid ${difficulty===key ? 'var(--c-primary)' : 'var(--c-border)'}`,
+              borderRadius:'var(--radius-md)', cursor:'pointer', transition:'all 0.12s',
+              background: difficulty===key ? 'var(--c-primary-bg)' : 'var(--c-surface)',
+            }}>
+              <span style={{ fontWeight:500, fontSize:13, color: difficulty===key ? '#0C447C' : 'var(--c-text)' }}>{label}</span>
+              <span style={{ fontSize:11, color:'var(--c-text-hint)', marginTop:2 }}>{desc}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.5rem' }}>
         <p className="label" style={{ margin:0 }}>題目（{items.length}）</p>
         <p style={{ fontSize:12, color:'var(--c-text-hint)' }}>用 ___ 代表填空位置</p>

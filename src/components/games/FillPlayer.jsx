@@ -1,7 +1,9 @@
 import { useState, useRef } from 'react'
+import ResultScreen from '../ResultScreen.jsx'
 
 export default function FillPlayer({ activity, onFinish, onRestart }) {
   const items = activity.items || []
+  const difficulty = activity.meta?.difficulty || 'easy'
   const [current, setCurrent]   = useState(0)
   const [input, setInput]       = useState('')
   const [status, setStatus]     = useState(null)
@@ -12,6 +14,7 @@ export default function FillPlayer({ activity, onFinish, onRestart }) {
   const inputRef = useRef(null)
   const item   = items[current]
   const parts  = item.sentence.split('___')
+  const reveal = status && difficulty === 'easy'
 
   function handleCheck() {
     if (!input.trim()) return
@@ -21,7 +24,7 @@ export default function FillPlayer({ activity, onFinish, onRestart }) {
   }
 
   function handleNext() {
-    if (current+1 >= items.length) { if (onFinish) onFinish(score + (correct?1:0), items.length); setFinished(true) }
+    if (current+1 >= items.length) { if (onFinish) onFinish(score, items.length); setFinished(true) }
     else { setCurrent(c=>c+1); setInput(''); setStatus(null); setShowHint(false); setTimeout(()=>inputRef.current?.focus(),50) }
   }
 
@@ -31,17 +34,7 @@ export default function FillPlayer({ activity, onFinish, onRestart }) {
   }
 
   if (finished) {
-    const pct = Math.round((score/items.length)*100)
-    return (
-      <div className="card" style={{ textAlign:'center', padding:'2.5rem 1rem' }}>
-        <div style={{ fontSize:48, marginBottom:8 }}>{pct===100?'🎉':pct>=60?'👍':'💪'}</div>
-        <p style={{ fontSize:20, fontWeight:500, marginBottom:4 }}>答對 {score} / {items.length} 題</p>
-        <p style={{ color:'var(--c-text-muted)', marginBottom:'1.5rem' }}>正確率 {pct}%</p>
-        <button className="btn-primary" onClick={handleRestart} style={{ padding:'10px 32px' }}>
-          <i className="ti ti-refresh" aria-hidden="true" /> 再玩一次
-        </button>
-      </div>
-    )
+    return <ResultScreen score={score} total={items.length} mistakes={mistakes} onRestart={handleRestart} />
   }
 
   return (
@@ -58,14 +51,16 @@ export default function FillPlayer({ activity, onFinish, onRestart }) {
           onChange={e => { if (status===null) setInput(e.target.value) }}
           onKeyDown={e => { if(e.key==='Enter'){ if(status===null) handleCheck(); else handleNext() } }}
           placeholder="填入答案"
-          style={{ display:'inline-block', width:140, padding:'4px 10px', border:`2px solid ${status==='correct'?'var(--c-success)':status==='wrong'?'var(--c-danger)':'var(--c-primary)'}`, borderRadius:'var(--radius-sm)', fontSize:17, fontWeight:500, margin:'0 6px', textAlign:'center', outline:'none', transition:'all 0.15s',
-            background: status==='correct'?'var(--c-success-bg)':status==='wrong'?'var(--c-danger-bg)':'var(--c-primary-bg)',
-            color: status==='correct'?'#27500A':status==='wrong'?'#791F1F':'var(--c-text)' }} />
+          style={{ display:'inline-block', width:140, padding:'4px 10px',
+            border:`2px solid ${reveal ? (status==='correct'?'var(--c-success)':'var(--c-danger)') : 'var(--c-primary)'}`,
+            borderRadius:'var(--radius-sm)', fontSize:17, fontWeight:500, margin:'0 6px', textAlign:'center', outline:'none', transition:'all 0.15s',
+            background: reveal ? (status==='correct'?'var(--c-success-bg)':'var(--c-danger-bg)') : 'var(--c-primary-bg)',
+            color: reveal ? (status==='correct'?'#27500A':'#791F1F') : 'var(--c-text)' }} />
         {parts[1]}
       </div>
       {item.hint && !showHint && <button onClick={() => setShowHint(true)} style={{ fontSize:13, padding:'4px 10px', marginBottom:8 }}><i className="ti ti-bulb" aria-hidden="true" /> 顯示提示</button>}
       {item.hint && showHint && <div style={{ padding:'7px 12px', background:'var(--c-warning-bg)', color:'var(--c-warning)', borderRadius:'var(--radius-sm)', fontSize:13, marginBottom:8, display:'flex', alignItems:'center', gap:6 }}><i className="ti ti-bulb" aria-hidden="true" /> {item.hint}</div>}
-      {status && (
+      {reveal && (
         <div style={{ padding:'10px 14px', borderRadius:'var(--radius-md)', fontSize:14, fontWeight:500, display:'flex', alignItems:'center', gap:6,
           background: status==='correct'?'var(--c-success-bg)':'var(--c-danger-bg)', color: status==='correct'?'#27500A':'#791F1F' }}>
           <i className={`ti ti-${status==='correct'?'circle-check':'circle-x'}`} aria-hidden="true" />

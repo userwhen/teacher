@@ -7,6 +7,7 @@ export default function SortEditor() {
   const { draft, updateDraftItem, addDraftItem, removeDraftItem, updateDraftMeta } = useStore()
   const items      = draft?.items || []
   const categories = draft?.meta?.categories || DEFAULT_CATEGORIES
+  const difficulty = draft?.meta?.difficulty || 'easy'
 
   function setCategories(cats) {
     updateDraftMeta('categories', cats)
@@ -15,6 +16,27 @@ export default function SortEditor() {
 
   return (
     <div>
+      {/* 難度選擇 */}
+      <div className="card" style={{ background:'var(--c-bg)', padding:'0.875rem', marginBottom:'0.75rem' }}>
+        <p className="label" style={{ marginBottom:8 }}>難度</p>
+        <div style={{ display:'flex', gap:8 }}>
+          {[
+            { key:'easy', label:'簡單', desc:'拖錯分類會提示' },
+            { key:'hard', label:'困難', desc:'拖錯分類不會提示，靜默彈回' },
+          ].map(({ key, label, desc }) => (
+            <div key={key} onClick={() => updateDraftMeta('difficulty', key)} style={{
+              flex:1, display:'flex', flexDirection:'column', padding:'10px 14px',
+              border:`1.5px solid ${difficulty===key ? 'var(--c-primary)' : 'var(--c-border)'}`,
+              borderRadius:'var(--radius-md)', cursor:'pointer', transition:'all 0.12s',
+              background: difficulty===key ? 'var(--c-primary-bg)' : 'var(--c-surface)',
+            }}>
+              <span style={{ fontWeight:500, fontSize:13, color: difficulty===key ? '#0C447C' : 'var(--c-text)' }}>{label}</span>
+              <span style={{ fontSize:11, color:'var(--c-text-hint)', marginTop:2 }}>{desc}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="card" style={{ background:'var(--c-bg)', marginBottom:'0.75rem' }}>
         <p className="label" style={{ marginBottom:8 }}>分類桶名稱</p>
         <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>

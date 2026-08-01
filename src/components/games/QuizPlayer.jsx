@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import ResultScreen from '../ResultScreen.jsx'
 
 export default function QuizPlayer({ activity, onFinish, onRestart }) {
   const items = activity.items || []
+  const difficulty = activity.meta?.difficulty || 'easy'
   const [current, setCurrent]   = useState(0)
   const [selected, setSelected] = useState(null)
   const [confirmed, setConfirmed] = useState(false)
@@ -11,6 +13,7 @@ export default function QuizPlayer({ activity, onFinish, onRestart }) {
 
   const item = items[current]
   const isCorrect = confirmed && selected === item.answerIndex
+  const reveal = confirmed && difficulty === 'easy'
 
   function handleConfirm() {
     if (selected === null) return
@@ -31,12 +34,8 @@ export default function QuizPlayer({ activity, onFinish, onRestart }) {
   }
 
   if (finished) {
-    const pct = Math.round((score / items.length) * 100)
     return (
-      <div className="card" style={{ textAlign:'center', padding:'2rem' }}>
-        <div style={{ fontSize:48, marginBottom:8 }}>{pct===100?'🎉':score>=items.length*0.6?'👍':'💪'}</div>
-        <p style={{ fontSize:20, fontWeight:500, marginBottom:4 }}>{pct===100?'全對！太棒了！':`答對 ${score} / ${items.length} 題`}</p>
-        <p style={{ color:'var(--c-text-muted)', marginBottom:'1.5rem' }}>正確率 {pct}%</p>
+      <ResultScreen score={score} total={items.length} mistakes={wrongCount} onRestart={handleRestart} perfectMessage="全對！太棒了！">
         <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:'1.25rem' }}>
           <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', padding:'1rem', borderRadius:'var(--radius-md)', background:'var(--c-success-bg)' }}>
             <span style={{ fontSize:24, fontWeight:500, color:'var(--c-success)' }}>{score}</span>
@@ -47,10 +46,7 @@ export default function QuizPlayer({ activity, onFinish, onRestart }) {
             <span style={{ fontSize:12, color:'var(--c-text-muted)', marginTop:2 }}>答錯</span>
           </div>
         </div>
-        <button className="btn-primary" onClick={handleRestart} style={{ width:'100%', padding:12 }}>
-          <i className="ti ti-refresh" aria-hidden="true" /> 再玩一次
-        </button>
-      </div>
+      </ResultScreen>
     )
   }
 
@@ -67,7 +63,7 @@ export default function QuizPlayer({ activity, onFinish, onRestart }) {
       </div>
       {item.options.map((opt, optIdx) => {
         let bg='var(--c-surface)', border='var(--c-border)', color='var(--c-text)'
-        if (confirmed) {
+        if (reveal) {
           if (optIdx === item.answerIndex) { bg='var(--c-success-bg)'; border='var(--c-success)'; color='#27500A' }
           else if (optIdx === selected)    { bg='var(--c-danger-bg)';  border='var(--c-danger)';  color='#791F1F' }
         } else if (selected === optIdx)    { bg='var(--c-primary-bg)'; border='var(--c-primary)'; color='#0C447C' }
@@ -76,12 +72,12 @@ export default function QuizPlayer({ activity, onFinish, onRestart }) {
             style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 14px', border:`1.5px solid ${border}`, borderRadius:'var(--radius-md)', marginBottom:8, background:bg, color, cursor:confirmed?'default':'pointer', fontSize:15, userSelect:'none', transition:'all 0.12s' }}>
             <span style={{ width:26, height:26, borderRadius:'50%', border:`1.5px solid ${border}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, flexShrink:0, color }}>{['A','B','C','D'][optIdx]}</span>
             <span>{opt}</span>
-            {confirmed && optIdx===item.answerIndex && <i className="ti ti-check" style={{ marginLeft:'auto', color:'var(--c-success)' }} aria-hidden="true" />}
-            {confirmed && optIdx===selected && selected!==item.answerIndex && <i className="ti ti-x" style={{ marginLeft:'auto', color:'var(--c-danger)' }} aria-hidden="true" />}
+            {reveal && optIdx===item.answerIndex && <i className="ti ti-check" style={{ marginLeft:'auto', color:'var(--c-success)' }} aria-hidden="true" />}
+            {reveal && optIdx===selected && selected!==item.answerIndex && <i className="ti ti-x" style={{ marginLeft:'auto', color:'var(--c-danger)' }} aria-hidden="true" />}
           </div>
         )
       })}
-      {confirmed && (
+      {reveal && (
         <div style={{ padding:'10px 14px', borderRadius:'var(--radius-md)', fontSize:14, fontWeight:500, marginTop:8, display:'flex', alignItems:'center', gap:6, background:isCorrect?'var(--c-success-bg)':'var(--c-danger-bg)', color:isCorrect?'#27500A':'#791F1F' }}>
           <i className={`ti ti-${isCorrect?'circle-check':'circle-x'}`} aria-hidden="true" />
           {isCorrect ? '答對了！' : `答錯了，正確答案是「${item.options[item.answerIndex]}」`}

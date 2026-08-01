@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import ResultScreen from '../ResultScreen.jsx'
 
 function shuffle(arr) {
   const a = [...arr]
@@ -39,12 +40,10 @@ export default function MatchupPlayer({ activity, onFinish, onRestart }) {
 
   function onDropSlot(itemIdx) {
     if (!dragging) return
-    // 若原本 slot 有字，把它送回詞庫（清掉 slot）
     const newSlots = { ...slots }
     if (dragging.fromSlot !== null && dragging.fromSlot !== undefined) {
       newSlots[dragging.fromSlot] = null
     }
-    // 若目標 slot 已有字，先清掉（送回詞庫）
     newSlots[itemIdx] = dragging.id
     setSlots(newSlots)
     setDragging(null)
@@ -71,13 +70,11 @@ export default function MatchupPlayer({ activity, onFinish, onRestart }) {
   function tapSlot(itemIdx) {
     if (checked) return
     if (tapping) {
-      // 放入
       const newSlots = { ...slots, [itemIdx]: tapping.id }
       setSlots(newSlots)
       setTapping(null)
       setChecked(false)
     } else if (slots[itemIdx] !== null && slots[itemIdx] !== undefined) {
-      // 從 slot 取出
       const wordId = slots[itemIdx]
       const word   = wordBank.find(w => w.id === wordId)
       setSlots(prev => ({ ...prev, [itemIdx]: null }))
@@ -120,20 +117,30 @@ export default function MatchupPlayer({ activity, onFinish, onRestart }) {
     return wordBank.find(w => w.id === wid)?.text
   }
 
+  if (submitted) {
+    return (
+      <ResultScreen score={correctCount} total={items.length} onRestart={handleRestart} perfectMessage="全部配對正確！">
+        <div style={{ textAlign:'left', marginBottom:'1.5rem' }}>
+          {items.map((item, idx) => {
+            const text = slotText(idx)
+            const ok = text === item.answer
+            return (
+              <div key={idx} style={{ display:'flex', alignItems:'flex-start', gap:8, padding:'7px 0', borderBottom:'1px solid var(--c-border)', fontSize:13 }}>
+                <i className={`ti ti-${ok?'check':'x'}`} style={{ color: ok?'#1D9E75':'#E24B4A', flexShrink:0, marginTop:2 }} aria-hidden="true" />
+                <span style={{ flex:1, textAlign:'left', color:'var(--c-text-muted)' }}>
+                  {item.sentence.replace('___', `〔${text || '空'}〕`)}
+                  {!ok && <span style={{ color:'#1D9E75' }}> → {item.answer}</span>}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      </ResultScreen>
+    )
+  }
+
   return (
     <div>
-      {/* 進度 */}
-      {submitted && (
-        <div style={{ marginBottom:12 }}>
-          <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, color:'var(--c-text-muted)', marginBottom:6 }}>
-            <span>答對 {correctCount} / {items.length}</span>
-          </div>
-          <div style={{ height:6, background:'var(--c-border)', borderRadius:999, overflow:'hidden' }}>
-            <div style={{ height:'100%', background:'var(--c-success)', borderRadius:999, transition:'width 0.3s', width:`${(correctCount/items.length)*100}%` }} />
-          </div>
-        </div>
-      )}
-
       <div style={{ display:'flex', gap:16, alignItems:'flex-start' }}>
         {/* 左側詞語庫 */}
         <div
@@ -174,7 +181,6 @@ export default function MatchupPlayer({ activity, onFinish, onRestart }) {
             const filled = text !== null && text !== undefined
             const isTapTarget = tapping && !filled
 
-            // slot 樣式
             let slotBg     = 'var(--c-bg)'
             let slotBorder = '2px dashed var(--c-border)'
             let slotColor  = 'var(--c-text-muted)'
@@ -227,24 +233,11 @@ export default function MatchupPlayer({ activity, onFinish, onRestart }) {
 
       {/* 按鈕 */}
       <div style={{ display:'flex', gap:8, marginTop:'1rem' }}>
-        {!submitted ? (
-          <button className="btn-primary" onClick={handleSubmit}
-            disabled={!allFilled}
-            style={{ flex:1, padding:12 }}>
-            {allFilled ? '提交答案' : `還有 ${items.filter((_,i) => slots[i]===null||slots[i]===undefined).length} 格未填`}
-          </button>
-        ) : (
-          <>
-            <button onClick={handleRestart} style={{ flex:1, padding:12 }}>
-              <i className="ti ti-refresh" aria-hidden="true" /> 再玩一次
-            </button>
-            <div style={{ flex:2, padding:'12px', textAlign:'center', borderRadius:'var(--radius-sm)',
-              background: correctCount===items.length ? 'var(--c-success-bg)' : 'var(--c-warning-bg)',
-              color: correctCount===items.length ? '#27500A' : 'var(--c-warning)', fontWeight:500, fontSize:14 }}>
-              {correctCount===items.length ? '🎉 全對！' : `答對 ${correctCount} / ${items.length} 題`}
-            </div>
-          </>
-        )}
+        <button className="btn-primary" onClick={handleSubmit}
+          disabled={!allFilled}
+          style={{ flex:1, padding:12 }}>
+          {allFilled ? '提交答案' : `還有 ${items.filter((_,i) => slots[i]===null||slots[i]===undefined).length} 格未填`}
+        </button>
       </div>
     </div>
   )

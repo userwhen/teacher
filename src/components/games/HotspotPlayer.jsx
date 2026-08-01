@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
+import ResultScreen from '../ResultScreen.jsx'
 
 function shuffle(arr) {
   const a = [...arr]
@@ -310,16 +311,7 @@ export default function HotspotPlayer({ activity, onFinish, onRestart }) {
   }
 
   if (finished) {
-    return (
-      <div className="card" style={{ textAlign:'center', padding:'2.5rem 1rem' }}>
-        <div style={{ fontSize:48, marginBottom:8 }}>{score===total?'🎉':score>=total*0.6?'👍':'💪'}</div>
-        <p style={{ fontSize:20, fontWeight:500, marginBottom:4 }}>{score===total?'全部配對正確！':`答對 ${score} / ${total}`}</p>
-        <p style={{ color:'var(--c-text-muted)', marginBottom:'1.5rem' }}>{mistakes===0?'零失誤，太厲害了！':`錯誤 ${mistakes} 次`}</p>
-        <button className="btn-primary" onClick={handleRestart} style={{ padding:'10px 32px' }}>
-          <i className="ti ti-refresh" aria-hidden="true" /> 再玩一次
-        </button>
-      </div>
-    )
+    return <ResultScreen score={score} total={total} mistakes={mistakes} onRestart={handleRestart} perfectMessage="全部配對正確！" />
   }
 
   if (mode==='label') return <LabelPlayer key="label" meta={meta} difficulty={difficulty} onFinish={handleFinish} />
