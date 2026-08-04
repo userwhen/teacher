@@ -1,7 +1,9 @@
 import useStore from '../../store/useStore.js'
+import CsvTools from '../CsvTools.jsx'
+import { matchupCsv } from '../../utils/csvConfigs.js'
 
 export default function MatchupEditor() {
-  const { draft, updateDraftItem, addDraftItem, removeDraftItem, updateDraftMeta } = useStore()
+  const { draft, setDraft, updateDraftItem, addDraftItem, removeDraftItem, updateDraftMeta } = useStore()
   const items = draft?.items || []
   const difficulty = draft?.meta?.difficulty || 'easy'
 
@@ -32,6 +34,8 @@ export default function MatchupEditor() {
           ))}
         </div>
       </div>
+
+      <CsvTools {...matchupCsv} items={items} onImport={newItems => setDraft({ ...draft, items: newItems })} />
 
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.5rem' }}>
         <p className="label" style={{ margin:0 }}>題目（{items.length}）</p>

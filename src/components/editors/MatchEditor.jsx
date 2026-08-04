@@ -1,8 +1,10 @@
 import useStore from '../../store/useStore.js'
 import { emptyItem } from '../../utils/schema.js'
+import CsvTools from '../CsvTools.jsx'
+import { matchCsv } from '../../utils/csvConfigs.js'
 
 export default function MatchEditor() {
-  const { draft, updateDraftItem, addDraftItem, removeDraftItem, updateDraftMeta } = useStore()
+  const { draft, setDraft, updateDraftItem, addDraftItem, removeDraftItem, updateDraftMeta } = useStore()
   const items      = draft?.items || []
   const difficulty = draft?.meta?.difficulty || 'easy'
 
@@ -27,6 +29,8 @@ export default function MatchEditor() {
           ))}
         </div>
       </div>
+
+      <CsvTools {...matchCsv} items={items} onImport={newItems => setDraft({ ...draft, items: newItems })} />
 
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.5rem' }}>
         <p className="label" style={{ margin:0 }}>配對組（{items.length}）</p>

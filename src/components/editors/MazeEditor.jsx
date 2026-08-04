@@ -1,10 +1,12 @@
 import useStore from '../../store/useStore.js'
+import CsvTools from '../CsvTools.jsx'
+import { quizCsv } from '../../utils/csvConfigs.js'
 
 const MAX_OPTIONS = 6
 const MIN_OPTIONS = 2
 
 export default function MazeEditor() {
-  const { draft, updateDraftItem, addDraftItem, removeDraftItem, updateDraftMeta } = useStore()
+  const { draft, setDraft, updateDraftItem, addDraftItem, removeDraftItem, updateDraftMeta } = useStore()
   const items      = draft?.items || []
   const meta       = draft?.meta  || {}
   const difficulty = meta.difficulty || 'normal'
@@ -95,6 +97,8 @@ export default function MazeEditor() {
       </div>
 
       {/* 題目清單 */}
+      <CsvTools {...quizCsv} items={items} onImport={newItems => setDraft({ ...draft, items: newItems })} />
+
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.5rem' }}>
         <p className="label" style={{ margin:0 }}>題目（{items.length}）</p>
         <p style={{ fontSize:12, color:'var(--c-text-hint)' }}>點圓圈設為正確答案・選項 {MIN_OPTIONS}–{MAX_OPTIONS} 個</p>

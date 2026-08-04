@@ -1,4 +1,6 @@
 import useStore from '../../store/useStore.js'
+import CsvTools from '../CsvTools.jsx'
+import { wordsearchCsv } from '../../utils/csvConfigs.js'
 
 const SIZE_OPTIONS = [
   { key: 10, label: '簡單', desc: '10×10 字格' },
@@ -109,6 +111,10 @@ export default function WordsearchEditor() {
           </div>
         ))}
       </div>
+
+      <CsvTools {...wordsearchCsv}
+        items={words.filter(Boolean).map((w, i) => ({ word: w, match: matches[i] || '' }))}
+        onImport={rows => { updateDraftMeta('words', rows.map(r => r.word)); updateDraftMeta('matches', rows.map(r => r.match)) }} />
 
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.5rem' }}>
         <p className="label" style={{ margin:0 }}>詞語清單（{validWords.length} 個有效）</p>

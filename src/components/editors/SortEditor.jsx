@@ -1,10 +1,12 @@
 import useStore from '../../store/useStore.js'
 import { emptyItem } from '../../utils/schema.js'
+import CsvTools from '../CsvTools.jsx'
+import { sortCsv } from '../../utils/csvConfigs.js'
 
 const DEFAULT_CATEGORIES = ['分類 A', '分類 B']
 
 export default function SortEditor() {
-  const { draft, updateDraftItem, addDraftItem, removeDraftItem, updateDraftMeta } = useStore()
+  const { draft, setDraft, updateDraftItem, addDraftItem, removeDraftItem, updateDraftMeta } = useStore()
   const items      = draft?.items || []
   const categories = draft?.meta?.categories || DEFAULT_CATEGORIES
   const difficulty = draft?.meta?.difficulty || 'easy'
@@ -56,6 +58,8 @@ export default function SortEditor() {
           </button>
         </div>
       </div>
+      <CsvTools {...sortCsv} items={items} onImport={newItems => setDraft({ ...draft, items: newItems })} />
+
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.5rem' }}>
         <p className="label" style={{ margin:0 }}>詞語（{items.length}）</p>
       </div>

@@ -1,7 +1,9 @@
 import useStore from '../../store/useStore.js'
+import CsvTools from '../CsvTools.jsx'
+import { timelineCsv } from '../../utils/csvConfigs.js'
 
 export default function TimelineEditor() {
-  const { draft, updateDraftItem, addDraftItem, removeDraftItem, updateDraftMeta } = useStore()
+  const { draft, setDraft, updateDraftItem, addDraftItem, removeDraftItem, updateDraftMeta } = useStore()
   const items = draft?.items || []
   const difficulty = draft?.meta?.difficulty || 'easy'
 
@@ -42,6 +44,8 @@ export default function TimelineEditor() {
       <div style={{ marginBottom:10, fontSize:12, color:'var(--c-text-hint)', padding:'6px 10px', background:'var(--c-bg)', borderRadius:'var(--radius-sm)', border:'1px solid var(--c-border)' }}>
         <i className="ti ti-info-circle" style={{ fontSize:14, verticalAlign:-2 }} aria-hidden="true" /> 由上至下為正確順序，學生端會打亂後讓學生排回來
       </div>
+
+      <CsvTools {...timelineCsv} items={items} onImport={newItems => setDraft({ ...draft, items: newItems })} />
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.5rem' }}>
         <p className="label" style={{ margin:0 }}>事件（{items.length}）</p>
       </div>

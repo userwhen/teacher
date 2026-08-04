@@ -2,7 +2,7 @@ import useStore from '../../store/useStore.js'
 import { emptyItem } from '../../utils/schema.js'
 
 export default function HighlightEditor() {
-  const { draft, updateDraftItem, addDraftItem, removeDraftItem, updateDraftMeta } = useStore()
+  const { draft, setDraft, updateDraftItem, addDraftItem, removeDraftItem, updateDraftMeta } = useStore()
   const items = draft?.items || []
   const difficulty = draft?.meta?.difficulty || 'easy'
 
