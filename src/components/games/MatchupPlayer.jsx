@@ -12,27 +12,33 @@ function shuffle(arr) {
 
 export default function MatchupPlayer({ activity, onFinish, onRestart }) {
   const items = (activity.items || []).filter(it => it.sentence && it.answer)
+  const difficulty = activity.meta?.difficulty || 'easy'
 
-  // 左側詞語（打亂順序，附 id）
   const wordBank = useMemo(() =>
     shuffle(items.map((it, i) => ({ id: i, text: it.answer, used: false })))
   , [])
 
-  // slots: { [itemIdx]: wordId | null }
-  const [slots,    setSlots]    = useState({})
-  const [dragging, setDragging] = useState(null)  // { id, text, fromSlot? }
+  const [slots,     setSlots]     = useState({})
+  const [dragging,  setDragging]  = useState(null)
   const [submitted, setSubmitted] = useState(false)
-  const [checked,  setChecked]  = useState(false)
+  const [checked,   setChecked]   = useState(false)
+  const [mistakes,  setMistakes]  = useState(0)
+  const [wrongSlot, setWrongSlot] = useState(null)
 
-  // 哪些 word id 已被放進 slot
   const usedIds = new Set(Object.values(slots).filter(v => v !== null && v !== undefined))
 
-  // ── 拖曳事件 ─────────────────────────────────────────────
+  function flashWrong(itemIdx) {
+    setMistakes(m => m + 1)
+    setWrongSlot(itemIdx)
+    setTimeout(() => setWrongSlot(null), 600)
+  }
+
   function onDragStartWord(word) {
     setDragging({ id: word.id, text: word.text, fromSlot: null })
   }
 
   function onDragStartSlot(itemIdx, wordId, text) {
+    if (difficulty === 'easy') return
     setDragging({ id: wordId, text, fromSlot: itemIdx })
   }
 
@@ -40,6 +46,14 @@ export default function MatchupPlayer({ activity, onFinish, onRestart }) {
 
   function onDropSlot(itemIdx) {
     if (!dragging) return
+    if (difficulty === 'easy') {
+      if (slots[itemIdx] !== null && slots[itemIdx] !== undefined) { setDragging(null); return }
+      if (dragging.text !== items[itemIdx].answer) {
+        flashWrong(itemIdx)
+        setDragging(null)
+        return
+      }
+    }
     const newSlots = { ...slots }
     if (dragging.fromSlot !== null && dragging.fromSlot !== undefined) {
       newSlots[dragging.fromSlot] = null
@@ -48,6 +62,11 @@ export default function MatchupPlayer({ activity, onFinish, onRestart }) {
     setSlots(newSlots)
     setDragging(null)
     setChecked(false)
+
+    if (difficulty === 'easy') {
+      const allDone = items.every((_, i) => newSlots[i] !== null && newSlots[i] !== undefined)
+      if (allDone) setTimeout(() => handleSubmit(newSlots), 400)
+    }
   }
 
   function onDropBank() {
@@ -59,8 +78,7 @@ export default function MatchupPlayer({ activity, onFinish, onRestart }) {
     setChecked(false)
   }
 
-  // ── 點擊模式（手機備用）──────────────────────────────────
-  const [tapping, setTapping] = useState(null) // { id, text }
+  const [tapping, setTapping] = useState(null)
 
   function tapWord(word) {
     if (checked) return
@@ -69,11 +87,22 @@ export default function MatchupPlayer({ activity, onFinish, onRestart }) {
 
   function tapSlot(itemIdx) {
     if (checked) return
+    if (difficulty === 'easy' && slots[itemIdx] !== null && slots[itemIdx] !== undefined) return
+
     if (tapping) {
+      if (difficulty === 'easy' && tapping.text !== items[itemIdx].answer) {
+        flashWrong(itemIdx)
+        setTapping(null)
+        return
+      }
       const newSlots = { ...slots, [itemIdx]: tapping.id }
       setSlots(newSlots)
       setTapping(null)
       setChecked(false)
+      if (difficulty === 'easy') {
+        const allDone = items.every((_, i) => newSlots[i] !== null && newSlots[i] !== undefined)
+        if (allDone) setTimeout(() => handleSubmit(newSlots), 400)
+      }
     } else if (slots[itemIdx] !== null && slots[itemIdx] !== undefined) {
       const wordId = slots[itemIdx]
       const word   = wordBank.find(w => w.id === wordId)
@@ -82,16 +111,17 @@ export default function MatchupPlayer({ activity, onFinish, onRestart }) {
     }
   }
 
-  // ── 結算 ─────────────────────────────────────────────────
-  function handleSubmit() {
+  function handleSubmit(slotsOverride) {
+    const finalSlots = slotsOverride || slots
     setChecked(true)
     setSubmitted(true)
-    const correct = items.filter((it,i) => { const wid=slots[i]; const word=wordBank.find(w=>w.id===wid); return word?.text===it.answer }).length
+    const correct = items.filter((it,i) => { const wid=finalSlots[i]; const word=wordBank.find(w=>w.id===wid); return word?.text===it.answer }).length
     if (onFinish) onFinish(correct, items.length)
   }
 
   function handleRestart() {
     setSlots({}); setChecked(false); setSubmitted(false); setDragging(null); setTapping(null)
+    setMistakes(0); setWrongSlot(null)
     if (onRestart) onRestart()
   }
 
@@ -119,7 +149,7 @@ export default function MatchupPlayer({ activity, onFinish, onRestart }) {
 
   if (submitted) {
     return (
-      <ResultScreen score={correctCount} total={items.length} onRestart={handleRestart} perfectMessage="全部配對正確！">
+      <ResultScreen score={correctCount} total={items.length} mistakes={difficulty==='easy' ? mistakes : null} onRestart={handleRestart} perfectMessage="全部配對正確！">
         <div style={{ textAlign:'left', marginBottom:'1.5rem' }}>
           {items.map((item, idx) => {
             const text = slotText(idx)
@@ -141,8 +171,11 @@ export default function MatchupPlayer({ activity, onFinish, onRestart }) {
 
   return (
     <div>
+      <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, color:'var(--c-text-muted)', marginBottom:6 }}>
+        <span>{difficulty==='easy' ? '拖對才會放進句子' : '全部填完再提交'}</span>
+        {difficulty==='easy' && <span>錯誤 {mistakes} 次</span>}
+      </div>
       <div style={{ display:'flex', gap:16, alignItems:'flex-start' }}>
-        {/* 左側詞語庫 */}
         <div
           onDragOver={e => e.preventDefault()}
           onDrop={onDropBank}
@@ -172,7 +205,6 @@ export default function MatchupPlayer({ activity, onFinish, onRestart }) {
           })}
         </div>
 
-        {/* 右側句子區 */}
         <div style={{ flex:1 }}>
           {items.map((item, idx) => {
             const parts  = item.sentence.split('___')
@@ -180,14 +212,19 @@ export default function MatchupPlayer({ activity, onFinish, onRestart }) {
             const text   = slotText(idx)
             const filled = text !== null && text !== undefined
             const isTapTarget = tapping && !filled
+            const isWrongFlash = wrongSlot === idx
 
             let slotBg     = 'var(--c-bg)'
             let slotBorder = '2px dashed var(--c-border)'
             let slotColor  = 'var(--c-text-muted)'
-            if (filled && !checked) { slotBg='var(--c-primary-bg)'; slotBorder='2px solid var(--c-primary)'; slotColor='#0C447C' }
+            if (isWrongFlash)                          { slotBg='var(--c-danger-bg)';  slotBorder='2px solid var(--c-danger)';  slotColor='#791F1F' }
+            else if (filled && difficulty === 'easy')  { slotBg='var(--c-success-bg)'; slotBorder='2px solid var(--c-success)'; slotColor='#27500A' }
+            else if (filled && !checked)               { slotBg='var(--c-primary-bg)'; slotBorder='2px solid var(--c-primary)'; slotColor='#0C447C' }
             if (result==='correct') { slotBg='var(--c-success-bg)'; slotBorder='2px solid var(--c-success)'; slotColor='#27500A' }
             if (result==='wrong')   { slotBg='var(--c-danger-bg)';  slotBorder='2px solid var(--c-danger)';  slotColor='#791F1F' }
             if (isTapTarget)        { slotBorder='2px dashed var(--c-primary)' }
+
+            const canDragOut = filled && !checked && difficulty !== 'easy'
 
             return (
               <div key={idx} style={S.sentenceRow}>
@@ -195,8 +232,8 @@ export default function MatchupPlayer({ activity, onFinish, onRestart }) {
                 <p style={{ fontSize:15, lineHeight:1.8, flex:1 }}>
                   {parts[0]}
                   <span
-                    draggable={filled && !checked}
-                    onDragStart={() => filled && !checked && onDragStartSlot(idx, slots[idx], text)}
+                    draggable={canDragOut}
+                    onDragStart={() => canDragOut && onDragStartSlot(idx, slots[idx], text)}
                     onDragOver={onDragOverSlot}
                     onDrop={() => onDropSlot(idx)}
                     onClick={() => tapSlot(idx)}
@@ -204,7 +241,7 @@ export default function MatchupPlayer({ activity, onFinish, onRestart }) {
                       display:'inline-block', minWidth:80, padding:'2px 10px',
                       margin:'0 4px', borderRadius:'var(--radius-sm)',
                       background:slotBg, border:slotBorder, color:slotColor,
-                      fontWeight:600, fontSize:14, cursor: checked?'default':filled?'grab':'pointer',
+                      fontWeight:600, fontSize:14, cursor: checked?'default':canDragOut?'grab':'pointer',
                       verticalAlign:'middle', transition:'all 0.12s',
                       textAlign:'center',
                     }}>
@@ -223,7 +260,6 @@ export default function MatchupPlayer({ activity, onFinish, onRestart }) {
         </div>
       </div>
 
-      {/* 點擊提示 */}
       {tapping && (
         <div style={{ padding:'8px 12px', background:'var(--c-primary-bg)', color:'#0C447C', borderRadius:'var(--radius-sm)', fontSize:13, fontWeight:500, marginTop:8, display:'flex', alignItems:'center', gap:6 }}>
           <i className="ti ti-hand-finger" aria-hidden="true" />
@@ -231,9 +267,8 @@ export default function MatchupPlayer({ activity, onFinish, onRestart }) {
         </div>
       )}
 
-      {/* 按鈕 */}
       <div style={{ display:'flex', gap:8, marginTop:'1rem' }}>
-        <button className="btn-primary" onClick={handleSubmit}
+        <button className="btn-primary" onClick={() => handleSubmit()}
           disabled={!allFilled}
           style={{ flex:1, padding:12 }}>
           {allFilled ? '提交答案' : `還有 ${items.filter((_,i) => slots[i]===null||slots[i]===undefined).length} 格未填`}

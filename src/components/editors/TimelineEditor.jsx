@@ -1,8 +1,9 @@
 import useStore from '../../store/useStore.js'
 
 export default function TimelineEditor() {
-  const { draft, updateDraftItem, addDraftItem, removeDraftItem } = useStore()
+  const { draft, updateDraftItem, addDraftItem, removeDraftItem, updateDraftMeta } = useStore()
   const items = draft?.items || []
+  const difficulty = draft?.meta?.difficulty || 'easy'
 
   function moveUp(idx) {
     if (idx === 0) return
@@ -17,6 +18,27 @@ export default function TimelineEditor() {
 
   return (
     <div>
+      {/* 難度選擇 */}
+      <div className="card" style={{ background:'var(--c-bg)', padding:'0.875rem', marginBottom:'0.75rem' }}>
+        <p className="label" style={{ marginBottom:8 }}>難度</p>
+        <div style={{ display:'flex', gap:8 }}>
+          {[
+            { key:'easy', label:'簡單', desc:'確認後標出哪幾格順序錯了' },
+            { key:'hard', label:'困難', desc:'確認後只講對不對，不標哪裡錯' },
+          ].map(({ key, label, desc }) => (
+            <div key={key} onClick={() => updateDraftMeta('difficulty', key)} style={{
+              flex:1, display:'flex', flexDirection:'column', padding:'10px 14px',
+              border:`1.5px solid ${difficulty===key ? 'var(--c-primary)' : 'var(--c-border)'}`,
+              borderRadius:'var(--radius-md)', cursor:'pointer', transition:'all 0.12s',
+              background: difficulty===key ? 'var(--c-primary-bg)' : 'var(--c-surface)',
+            }}>
+              <span style={{ fontWeight:500, fontSize:13, color: difficulty===key ? '#0C447C' : 'var(--c-text)' }}>{label}</span>
+              <span style={{ fontSize:11, color:'var(--c-text-hint)', marginTop:2 }}>{desc}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div style={{ marginBottom:10, fontSize:12, color:'var(--c-text-hint)', padding:'6px 10px', background:'var(--c-bg)', borderRadius:'var(--radius-sm)', border:'1px solid var(--c-border)' }}>
         <i className="ti ti-info-circle" style={{ fontSize:14, verticalAlign:-2 }} aria-hidden="true" /> 由上至下為正確順序，學生端會打亂後讓學生排回來
       </div>

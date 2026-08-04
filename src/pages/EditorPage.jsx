@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import useStore from '../store/useStore.js'
-import { GAME_META, SUBJECTS, emptyActivity } from '../utils/schema.js'
+import { GAME_META, SUBJECTS, THEMES, emptyActivity } from '../utils/schema.js'
 import { buildPlayUrl } from '../utils/codec.js'
 import { shortenUrl } from '../utils/shorten.js'
 import QuizEditor      from '../components/editors/QuizEditor.jsx'
@@ -38,6 +38,7 @@ export default function EditorPage() {
 
   const EditorComponent = EDITORS[gameType]
   const meta = GAME_META[gameType]
+  const theme = draft.theme || 'default'
 
   function handleGenerate() {
     if (!draft.title.trim()) { alert('請填寫標題'); return }
@@ -137,6 +138,23 @@ export default function EditorPage() {
                   <option value={300}>5 分鐘</option>
                 </select>
               </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <label className="label" style={{ marginBottom:8 }}>視覺主題</label>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(80px,1fr))', gap:8 }}>
+              {THEMES.map(t => (
+                <div key={t.key} onClick={() => updateDraftField('theme', t.key)} style={{
+                  display:'flex', flexDirection:'column', alignItems:'center', gap:6, padding:'10px 6px',
+                  border:`1.5px solid ${theme===t.key ? 'var(--c-primary)' : 'var(--c-border)'}`,
+                  borderRadius:'var(--radius-md)', cursor:'pointer', transition:'all 0.12s',
+                  background: theme===t.key ? 'var(--c-primary-bg)' : 'var(--c-surface)',
+                }}>
+                  <span style={{ width:22, height:22, borderRadius:'50%', background:t.color, border:'2px solid var(--c-surface)', boxShadow:'0 0 0 1px var(--c-border)' }} />
+                  <span style={{ fontSize:12, fontWeight:500, color: theme===t.key ? '#0C447C' : 'var(--c-text)' }}>{t.label}</span>
+                </div>
+              ))}
             </div>
           </div>
 

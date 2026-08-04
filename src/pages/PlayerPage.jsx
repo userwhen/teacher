@@ -64,6 +64,7 @@ export default function PlayerPage() {
   const meta            = GAME_META[activity.gameType]
   const timeLimit       = activity.timeLimit || 0   // 0 = 不限時
   const showTimer       = !NO_TIMER.includes(activity.gameType)
+  const theme           = activity.theme || 'default'
 
   // 遊戲結束 callback（各 Player 呼叫）
   const handleFinish = useCallback((score, total) => {
@@ -99,7 +100,7 @@ setRestartKey(k => k + 1)
 }, [])
 
   return (
-    <div className="page">
+    <div className={`page theme-${theme}`}>
       {/* 標頭 */}
       <div style={styles.header}>
         <div style={{ flex:1 }}>

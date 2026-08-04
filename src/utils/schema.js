@@ -20,6 +20,15 @@ export const GAME_META = {
 
 export const SUBJECTS = ['國文', '數學', '自然', '社會', '英文', '作文']
 
+export const THEMES = [
+  { key: 'default', label: '預設', color: '#185FA5' },
+  { key: 'dark',    label: '暗黑', color: '#4C9FE8' },
+  { key: 'forest',  label: '森林', color: '#3F7D4F' },
+  { key: 'sunny',   label: '暖陽', color: '#E08A2E' },
+  { key: 'ocean',   label: '海洋', color: '#1279A6' },
+  { key: 'candy',   label: '糖果', color: '#D6499E' },
+]
+
 export function emptyItem(gameType) {
   switch (gameType) {
     case 'quiz':

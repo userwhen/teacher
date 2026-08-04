@@ -1,14 +1,36 @@
 import useStore from '../../store/useStore.js'
 
 export default function MatchupEditor() {
-  const { draft, updateDraftItem, addDraftItem, removeDraftItem } = useStore()
+  const { draft, updateDraftItem, addDraftItem, removeDraftItem, updateDraftMeta } = useStore()
   const items = draft?.items || []
+  const difficulty = draft?.meta?.difficulty || 'easy'
 
   return (
     <div>
       <div style={S.tip}>
         <i className="ti ti-info-circle" style={{ fontSize:14, verticalAlign:-2 }} aria-hidden="true" />
         {' '}輸入句子時用 ___ 標記填空位置，再填入對應的正確詞語。學生把左側詞語拖入句子空格。
+      </div>
+
+      {/* 難度選擇 */}
+      <div className="card" style={{ background:'var(--c-bg)', padding:'0.875rem', marginBottom:'0.75rem' }}>
+        <p className="label" style={{ marginBottom:8 }}>難度</p>
+        <div style={{ display:'flex', gap:8 }}>
+          {[
+            { key:'easy', label:'簡單', desc:'放錯詞語會被退回，不會卡在句子裡' },
+            { key:'hard', label:'困難', desc:'可以先全部填完，提交後才知道對錯' },
+          ].map(({ key, label, desc }) => (
+            <div key={key} onClick={() => updateDraftMeta('difficulty', key)} style={{
+              flex:1, display:'flex', flexDirection:'column', padding:'10px 14px',
+              border:`1.5px solid ${difficulty===key ? 'var(--c-primary)' : 'var(--c-border)'}`,
+              borderRadius:'var(--radius-md)', cursor:'pointer', transition:'all 0.12s',
+              background: difficulty===key ? 'var(--c-primary-bg)' : 'var(--c-surface)',
+            }}>
+              <span style={{ fontWeight:500, fontSize:13, color: difficulty===key ? '#0C447C' : 'var(--c-text)' }}>{label}</span>
+              <span style={{ fontSize:11, color:'var(--c-text-hint)', marginTop:2 }}>{desc}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.5rem' }}>

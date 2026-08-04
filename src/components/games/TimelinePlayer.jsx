@@ -7,6 +7,7 @@ function shuffle(arr) {
 
 export default function TimelinePlayer({ activity, onFinish, onRestart }) {
   const items   = activity.items || []
+  const difficulty = activity.meta?.difficulty || 'easy'
   const correct = useMemo(() => [...items].sort((a,b)=>a.order-b.order).map(it=>it.text), [])
   const [order, setOrder]       = useState(() => shuffle(correct))
   const [checked, setChecked]   = useState(false)
@@ -61,20 +62,23 @@ export default function TimelinePlayer({ activity, onFinish, onRestart }) {
     </ResultScreen>
   )
 
+  const allCorrect = order.every((t,i)=>t===correct[i])
+  const revealPositions = checked && difficulty === 'easy'
+
   return (
     <div>
       <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, color:'var(--c-text-muted)', marginBottom:8 }}>
         <span>拖曳排出正確順序</span><span>嘗試 {mistakes} 次</span>
       </div>
-      {checked && !order.every((t,i)=>t===correct[i]) && (
+      {checked && !allCorrect && (
         <div style={{ padding:'8px 12px', background:'var(--c-danger-bg)', color:'#791F1F', borderRadius:'var(--radius-sm)', fontSize:13, marginBottom:10, display:'flex', alignItems:'center', gap:6 }}>
           <i className="ti ti-alert-triangle" aria-hidden="true" /> 順序還不對，再調整看看！
         </div>
       )}
       <div style={{ userSelect:'none' }}>
         {order.map((text, i) => {
-          const isCorrect = checked && text===correct[i]
-          const isWrong   = checked && text!==correct[i]
+          const isCorrect = revealPositions && text===correct[i]
+          const isWrong   = revealPositions && text!==correct[i]
           return (
             <div key={text} data-idx={i} draggable
               onDragStart={()=>onDragStart(i)} onDragOver={e=>onDragOver(e,i)} onDragEnd={onDragEnd}
