@@ -4,17 +4,16 @@ import ResultScreen from '../ResultScreen.jsx'
 // ── 常數 ─────────────────────────────────────────────────────
 const COLS = 15
 const ROWS = 15
-const CELL = 38
+const CELL = 32
 
-// 6 個房間：中心格座標 + 固定入口方向
-// 入口方向：從房間邊緣往外打通一格走廊
+// 6 個房間：中心格座標（入口方向改成每次隨機，見 getActiveRooms）
 const ROOM_DEFS = [
-  { r: 3,  c: 3,  entry: 'right' },  // 左上，入口朝右
-  { r: 3,  c: 11, entry: 'left'  },  // 右上，入口朝左
-  { r: 11, c: 3,  entry: 'right' },  // 左下，入口朝右
-  { r: 11, c: 11, entry: 'left'  },  // 右下，入口朝左
-  { r: 3,  c: 7,  entry: 'down'  },  // 中上，入口朝下
-  { r: 11, c: 7,  entry: 'up'    },  // 中下，入口朝上
+  { r: 3,  c: 3  },  // 左上
+  { r: 3,  c: 11 },  // 右上
+  { r: 11, c: 3  },  // 左下
+  { r: 11, c: 11 },  // 右下
+  { r: 3,  c: 7  },  // 中上
+  { r: 11, c: 7  },  // 中下
 ]
 
 const PLAYER_START = { r: 7, c: 7 }
@@ -146,9 +145,9 @@ function generateMaze(activeRooms) {
   return walls
 }
 
-// 依難度拆牆（增加開放路線）
+// 依難度拆牆（增加開放路線；數值調高讓地圖整體更開闊）
 function knockWalls(walls, difficulty, allRoomCells) {
-  const rate = difficulty === 'easy' ? 0.35 : difficulty === 'normal' ? 0.20 : 0.15
+  const rate = difficulty === 'easy' ? 0.5 : difficulty === 'normal' ? 0.32 : 0.25
   const dirs = ['right', 'bottom']
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
@@ -160,6 +159,35 @@ function knockWalls(walls, difficulty, allRoomCells) {
         if (!inBounds(nr, nc)) continue
         if (allRoomCells.has(`${nr},${nc}`)) continue
         if (Math.random() < rate) removeWall(walls, r, c, dir)
+      }
+    }
+  }
+}
+
+// 消除整張地圖的死路：每個走廊格至少要有 2 個出口（房間內部不受影響，
+// 房間本來就全部打通）。在 knockWalls() 之後跑，等於做一次完整補強。
+function eliminateDeadEnds(walls, allRoomCells) {
+  const dirs = [
+    ['top',    -1, 0, 'bottom'],
+    ['bottom',  1, 0, 'top'   ],
+    ['left',    0,-1, 'right' ],
+    ['right',   0, 1, 'left'  ],
+  ]
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (allRoomCells.has(`${r},${c}`)) continue
+      let openCount = dirs.filter(([dir]) => !walls[r][c][dir]).length
+      if (openCount >= 2) continue
+
+      const closedDirs = dirs.filter(([dir]) => walls[r][c][dir]).sort(() => Math.random() - 0.5)
+      for (const [dir, dr, dc, opp] of closedDirs) {
+        if (openCount >= 2) break
+        const nr = r + dr, nc = c + dc
+        if (!inBounds(nr, nc)) continue
+        if (allRoomCells.has(`${nr},${nc}`)) continue
+        walls[r][c][dir]   = false
+        walls[nr][nc][opp] = false
+        openCount++
       }
     }
   }
@@ -189,6 +217,30 @@ function bfsPath(walls, sr, sc, er, ec) {
 
 function bfsDist(walls, sr, sc, er, ec) {
   return bfsPath(walls, sr, sc, er, ec).length
+}
+
+// ── 敵人移動輔助（避免同格重疊）──────────────────────────────
+function posKey(p) { return `${p.r},${p.c}` }
+
+function pickAvoidingOccupied(moves, occupied) {
+  const free = moves.filter(m => !occupied.has(posKey(m)))
+  const pool = free.length ? free : moves
+  return pool[Math.floor(Math.random() * pool.length)]
+}
+
+// ── 主題色彩（從 CSS 變數讀取，隨主題自動換色）───────────────
+function getThemeColors(canvas) {
+  const cs = getComputedStyle(canvas)
+  const v = (name, fallback) => cs.getPropertyValue(name).trim() || fallback
+  return {
+    bg:        v('--c-bg',         '#f8f7f4'),
+    surface:   v('--c-surface',    '#ffffff'),
+    primary:   v('--c-primary',    '#185FA5'),
+    primaryBg: v('--c-primary-bg', '#E6F1FB'),
+    text:      v('--c-text',       '#2c2c2a'),
+    textMuted: v('--c-text-muted', '#5f5e5a'),
+    warning:   v('--c-warning',    '#BA7517'),
+  }
 }
 
 // ── 愛心 ─────────────────────────────────────────────────────
@@ -230,10 +282,14 @@ export default function MazePlayer({ activity, onFinish, onRestart }) {
 
   const item = items[qIdxRef.current % items.length]
 
-  // ── 選出本題使用的房間 ───────────────────────────────────
+  // ── 選出本題使用的房間（每次隨機指派入口方向）───────────
   function getActiveRooms(currentItem) {
-    const optCount = Math.min(6, currentItem?.options?.length || 4)
-    return ROOM_DEFS.slice(0, optCount)
+    const optCount   = Math.min(6, currentItem?.options?.length || 4)
+    const entryDirs  = ['up', 'down', 'left', 'right']
+    return ROOM_DEFS.slice(0, optCount).map(rm => ({
+      ...rm,
+      entry: entryDirs[Math.floor(Math.random() * entryDirs.length)],
+    }))
   }
 
   // ── 初始化迷宮和實體位置 ─────────────────────────────────
@@ -242,6 +298,7 @@ export default function MazePlayer({ activity, onFinish, onRestart }) {
     const roomKeysForKnock = new Set(activeRooms.flatMap(rm => [...roomCells(rm)]))
     const walls       = generateMaze(activeRooms)
     knockWalls(walls, difficulty, roomKeysForKnock)
+    eliminateDeadEnds(walls, roomKeysForKnock)
     wallsRef.current  = walls
 
     // 隨機分配選項到房間
@@ -270,15 +327,16 @@ export default function MazePlayer({ activity, onFinish, onRestart }) {
     const ctx   = canvas.getContext('2d')
     const walls = wallsRef.current
     const currentItem = items[qIdxRef.current % items.length]
+    const theme = getThemeColors(canvas)
 
     ctx.clearRect(0, 0, COLS * CELL, ROWS * CELL)
 
     // 背景
-    ctx.fillStyle = '#12122a'
+    ctx.fillStyle = theme.bg
     ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL)
 
-    // 走廊格背景（淡色）
-    ctx.fillStyle = '#1a1a3e'
+    // 走廊格背景
+    ctx.fillStyle = theme.surface
     for (let r = 0; r < ROWS; r++)
       for (let c = 0; c < COLS; c++)
         ctx.fillRect(c * CELL + 1, r * CELL + 1, CELL - 2, CELL - 2)
@@ -291,12 +349,12 @@ export default function MazePlayer({ activity, onFinish, onRestart }) {
       const opt = currentItem?.options?.[room.optionIdx] ?? ''
 
       // 房間底色
-      ctx.fillStyle = '#252550'
+      ctx.fillStyle = theme.primaryBg
       ctx.fillRect(x + 1, y + 1, w - 2, w - 2)
 
       // 房間邊框（帶入口缺口）
-      ctx.strokeStyle = '#7070cc'
-      ctx.lineWidth   = 2.5
+      ctx.strokeStyle = theme.primary
+      ctx.lineWidth   = 3.5
       const gapStart = CELL * 0.8   // 缺口在中間 cell 的中段
       const gapEnd   = CELL * 2.2
       // top
@@ -330,7 +388,7 @@ export default function MazePlayer({ activity, onFinish, onRestart }) {
 
       // 選項文字
       if (opt) {
-        ctx.fillStyle    = '#dde0ff'
+        ctx.fillStyle    = theme.text
         ctx.textAlign    = 'center'
         ctx.textBaseline = 'middle'
         const cx   = x + w / 2
@@ -348,8 +406,8 @@ export default function MazePlayer({ activity, onFinish, onRestart }) {
     }
 
     // 牆壁
-    ctx.strokeStyle = '#4444bb'
-    ctx.lineWidth   = 1.5
+    ctx.strokeStyle = theme.textMuted
+    ctx.lineWidth   = 3
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
         const x = c * CELL, y = r * CELL
@@ -363,8 +421,8 @@ export default function MazePlayer({ activity, onFinish, onRestart }) {
       }
     }
 
-    // 穿越通道視覺提示（青色箭頭標記）
-    ctx.fillStyle = '#00cccc'
+    // 穿越通道視覺提示（主題強調色箭頭標記）
+    ctx.fillStyle = theme.warning
     ctx.font      = 'bold 11px sans-serif'
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
     for (const c of TUNNEL_COLS) {
@@ -380,12 +438,30 @@ export default function MazePlayer({ activity, onFinish, onRestart }) {
       ctx.fillText('▶', (COLS - 1) * CELL + CELL * 0.7, r * CELL + CELL/2)
     }
 
-    // 敵人
+    // 敵人（同格重疊時做小幅位移，避免互相完全遮住）
     ctx.font         = `${CELL * 0.6}px serif`
     ctx.textAlign    = 'center'
     ctx.textBaseline = 'middle'
+    const groups = new Map()
     for (const e of enemiesRef.current) {
-      ctx.fillText('👾', e.c * CELL + CELL / 2, e.r * CELL + CELL / 2)
+      const key = posKey(e)
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key).push(e)
+    }
+    for (const group of groups.values()) {
+      const n = group.length
+      group.forEach((e, i) => {
+        const cx = e.c * CELL + CELL / 2
+        const cy = e.r * CELL + CELL / 2
+        let ox = 0, oy = 0
+        if (n > 1) {
+          const angle = (i / n) * Math.PI * 2
+          const radius = CELL * 0.16
+          ox = Math.cos(angle) * radius
+          oy = Math.sin(angle) * radius
+        }
+        ctx.fillText('👾', cx + ox, cy + oy)
+      })
     }
 
     // 玩家
@@ -394,10 +470,11 @@ export default function MazePlayer({ activity, onFinish, onRestart }) {
   }, [items])
 
   // ── 敵人移動 ─────────────────────────────────────────────
-  function moveEnemies(forceChase = false) {
+  function moveEnemies() {
     const walls  = wallsRef.current
     if (!walls) return
     const player = playerRef.current
+    const occupied = new Set()   // 本次 tick 已被分配的格子，避免多隻怪物疊在一起
 
     enemiesRef.current = enemiesRef.current.map(e => {
       // 計算可移動的格子（含穿越通道）
@@ -412,26 +489,33 @@ export default function MazePlayer({ activity, onFinish, onRestart }) {
           return { r: nr, c: nc }
         })
 
-      if (!validMoves.length) return e
+      if (!validMoves.length) {
+        occupied.add(posKey(e))
+        return e
+      }
 
+      let choice
       if (difficulty === 'easy') {
         // 全地圖隨機巡邏
-        return validMoves[Math.floor(Math.random() * validMoves.length)]
-      }
+        choice = pickAvoidingOccupied(validMoves, occupied)
+      } else {
+        const dist = bfsDist(walls, e.r, e.c, player.r, player.c)
 
-      const dist = bfsDist(walls, e.r, e.c, player.r, player.c)
-
-      if (difficulty === 'normal') {
-        if (dist > CHASE_RADIUS) {
+        if (difficulty === 'normal' && dist > CHASE_RADIUS) {
           // 超出範圍：隨機巡邏
-          return validMoves[Math.floor(Math.random() * validMoves.length)]
+          choice = pickAvoidingOccupied(validMoves, occupied)
+        } else {
+          // hard 或 normal 靠近：BFS 追，但避開已被其他怪物佔用的格子
+          const path = bfsPath(walls, e.r, e.c, player.r, player.c)
+          const preferred = path.length ? path[0] : e
+          choice = occupied.has(posKey(preferred))
+            ? pickAvoidingOccupied(validMoves, occupied)
+            : preferred
         }
-        // 靠近：追玩家
       }
 
-      // hard 或 normal 靠近：BFS 追
-      const path = bfsPath(walls, e.r, e.c, player.r, player.c)
-      return path.length ? path[0] : e
+      occupied.add(posKey(choice))
+      return choice
     })
   }
 
@@ -456,6 +540,7 @@ export default function MazePlayer({ activity, onFinish, onRestart }) {
     }
   }
 
+  // ── 重新分配敵人位置（重置時使用，一次洗牌、確保彼此不重複）
   function triggerLoseHeart(reason) {
     clearInterval(tickRef.current)
     const next = heartsRef.current - 1
@@ -471,16 +556,9 @@ export default function MazePlayer({ activity, onFinish, onRestart }) {
       return
     }
 
-    // 重置位置，短暫停頓後繼續
-    playerRef.current  = { ...PLAYER_START }
-    enemiesRef.current = enemiesRef.current.map((_, i) => {
-      const allRoomKeys = new Set(getActiveRooms(items[qIdxRef.current % items.length]).flatMap(rm => [...roomCells(rm)]))
-      const valid = ENEMY_CANDIDATES.filter(pos => {
-        if (allRoomKeys.has(`${pos.r},${pos.c}`)) return false
-        return bfsDist(wallsRef.current, pos.r, pos.c, PLAYER_START.r, PLAYER_START.c) > 4
-      }).sort(() => Math.random() - 0.5)
-      return valid[i % valid.length] || ENEMY_CANDIDATES[i]
-    })
+    // 同一題重來，但整張地圖重新生成（牆壁、房間入口、選項位置、怪物位置全部重新洗牌）
+    const currentItem = items[qIdxRef.current % items.length]
+    initMaze(currentItem)
     draw()
     setTimeout(() => { if (phaseRef.current === 'playing') startTick() }, 1500)
   }
@@ -502,10 +580,18 @@ export default function MazePlayer({ activity, onFinish, onRestart }) {
       setTimeout(() => {
         const newItem = items[next % items.length]
         initMaze(newItem)
-        draw()
-        startTick()
+        phaseRef.current = 'ready'
+        setPhase('ready')
       }, 800)
     }
+  }
+
+  // 玩家點「開始」，正式讓怪物開始動
+  function beginChase() {
+    if (phaseRef.current !== 'ready') return
+    phaseRef.current = 'playing'
+    setPhase('playing')
+    requestAnimationFrame(() => { draw(); startTick() })
   }
 
   // ── 遊戲主循環 ───────────────────────────────────────────
@@ -595,16 +681,15 @@ export default function MazePlayer({ activity, onFinish, onRestart }) {
     clearInterval(tickRef.current)
     heartsRef.current = maxHearts
     qIdxRef.current   = 0
-    phaseRef.current  = 'playing'
+    phaseRef.current  = 'ready'
     setHearts(maxHearts)
     setScore(0)
     setQIdx(0)
     setFinished(false)
     setFlash(null)
-    setPhase('playing')
+    setPhase('ready')
     const firstItem = items[0]
     initMaze(firstItem)
-    requestAnimationFrame(() => { draw(); startTick() })
     if (wasFinished && onRestart) onRestart()
   }
 
@@ -657,7 +742,10 @@ export default function MazePlayer({ activity, onFinish, onRestart }) {
   const currentItem = items[qIdx % items.length]
   return (
     <div>
-      <style>{`@keyframes flashAnim { from { opacity:1 } to { opacity:0 } }`}</style>
+      <style>{`
+        @keyframes flashAnim { from { opacity:1 } to { opacity:0 } }
+        .maze-layout { display:flex; align-items:center; justify-content:center; gap:16px; flex-wrap:wrap; }
+      `}</style>
 
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
         <Hearts total={maxHearts} remaining={hearts} />
@@ -666,44 +754,66 @@ export default function MazePlayer({ activity, onFinish, onRestart }) {
         </span>
       </div>
 
-      <div className="card" style={{ padding:'10px 14px', marginBottom:10, textAlign:'center' }}>
-        <p style={{ fontSize:16, fontWeight:500, lineHeight:1.5 }}>
-          {currentItem?.question}
-        </p>
-      </div>
+      {phase === 'ready' ? (
+        <div className="card" style={{
+          width: COLS * CELL, height: ROWS * CELL, maxWidth:'100%',
+          margin:'0 auto', padding:'2rem 1.5rem',
+          display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+          gap:'1.75rem', textAlign:'center',
+        }}>
+          <p style={{ fontSize:20, fontWeight:600, lineHeight:1.7 }}>
+            {currentItem?.question}
+          </p>
+          <button className="btn-primary" onClick={beginChase} style={{ padding:'12px 40px', fontSize:16 }}>
+            準備好了，開始！
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="card" style={{ padding:'10px 14px', marginBottom:10, textAlign:'center' }}>
+            <p style={{ fontSize:16, fontWeight:500, lineHeight:1.5 }}>
+              {currentItem?.question}
+            </p>
+          </div>
 
-      <div style={{ position:'relative', display:'inline-block', width:'100%', overflowX:'auto' }}>
-        {flashStyle && <div style={flashStyle} />}
-        <canvas
-          ref={canvasRef}
-          width={COLS * CELL}
-          height={ROWS * CELL}
-          style={{ display:'block', margin:'0 auto', borderRadius:'var(--radius-md)', border:'2px solid #333' }}
-          onTouchStart={onTouchStart}
-          onTouchEnd={onTouchEnd}
-        />
-      </div>
+          <div className="maze-layout">
+            <div style={{ position:'relative', display:'inline-block', maxWidth:'100%', overflowX:'auto' }}>
+              {flashStyle && <div style={flashStyle} />}
+              <canvas
+                ref={canvasRef}
+                width={COLS * CELL}
+                height={ROWS * CELL}
+                style={{ display:'block', borderRadius:'var(--radius-md)', border:'2px solid var(--c-border-strong)' }}
+                onTouchStart={onTouchStart}
+                onTouchEnd={onTouchEnd}
+              />
+            </div>
 
-      {/* 方向鍵 */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,44px)', gridTemplateRows:'repeat(3,44px)', gap:4, margin:'10px auto 0', width:'fit-content' }}>
-        {[
-          [null,                    () => movePlayer(-1,0), null                   ],
-          [() => movePlayer(0,-1),  null,                   () => movePlayer(0, 1) ],
-          [null,                    () => movePlayer( 1,0), null                   ],
-        ].map((row, ri) =>
-          row.map((fn, ci) =>
-            fn
-              ? <button key={`${ri}-${ci}`} onClick={fn}
-                  style={{ width:44, height:44, fontSize:18, display:'flex', alignItems:'center', justifyContent:'center', padding:0, borderRadius:'var(--radius-sm)' }}>
-                  {ri===0?'▲':ri===2?'▼':ci===0?'◀':'▶'}
-                </button>
-              : <div key={`${ri}-${ci}`} />
-          )
-        )}
-      </div>
-      <p style={{ fontSize:11, color:'var(--c-text-hint)', textAlign:'center', marginTop:4 }}>
-        方向鍵 / WASD / 滑動螢幕移動
-      </p>
+            {/* 方向鍵：寬螢幕時排在畫布右側，空間不夠會自動換到下方置中 */}
+            <div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(3,44px)', gridTemplateRows:'repeat(3,44px)', gap:4, width:'fit-content', margin:'0 auto' }}>
+                {[
+                  [null,                    () => movePlayer(-1,0), null                   ],
+                  [() => movePlayer(0,-1),  null,                   () => movePlayer(0, 1) ],
+                  [null,                    () => movePlayer( 1,0), null                   ],
+                ].map((row, ri) =>
+                  row.map((fn, ci) =>
+                    fn
+                      ? <button key={`${ri}-${ci}`} onClick={fn}
+                          style={{ width:44, height:44, fontSize:18, display:'flex', alignItems:'center', justifyContent:'center', padding:0, borderRadius:'var(--radius-sm)' }}>
+                          {ri===0?'▲':ri===2?'▼':ci===0?'◀':'▶'}
+                        </button>
+                      : <div key={`${ri}-${ci}`} />
+                  )
+                )}
+              </div>
+              <p style={{ fontSize:11, color:'var(--c-text-hint)', textAlign:'center', marginTop:4 }}>
+                方向鍵 / WASD /<br/>滑動螢幕移動
+              </p>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
