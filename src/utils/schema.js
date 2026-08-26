@@ -15,7 +15,7 @@ export const GAME_META = {
   anagram:   { label: '字母重組',   labelEn: 'Anagram',           icon: 'arrows-shuffle', desc: '點選字母拼出答案' },
   wordsearch:{ label: '字格找字',   labelEn: 'Word Search',       icon: 'letter-case',    desc: '拖曳框出隱藏詞語' },
   highlight: { label: '文海找字',   labelEn: 'Highlight',         icon: 'highlight',      desc: '點出正確詞語' },
-  puzzle:    { label: '拼圖',       labelEn: 'Jigsaw Puzzle',     icon: 'puzzle',         desc: '功能開發中' },
+  puzzle:    { label: '拼圖',       labelEn: 'Jigsaw Puzzle',     icon: 'puzzle',         desc: '點選碎片交換還原圖片' },
 }
 
 export const SUBJECTS = ['國文', '數學', '自然', '社會', '英文', '作文']

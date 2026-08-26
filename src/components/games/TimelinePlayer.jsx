@@ -39,6 +39,15 @@ export default function TimelinePlayer({ activity, onFinish, onRestart }) {
   }
   function onTouchEnd(){touchItemIdx.current=null}
 
+  function moveItem(idx, dir) {
+    const to = idx + dir
+    if (to < 0 || to >= order.length) return
+    const next = [...order]
+    ;[next[idx], next[to]] = [next[to], next[idx]]
+    setOrder(next)
+    setChecked(false)
+  }
+
   function handleCheck() {
     const ok=order.every((text,i)=>text===correct[i])
     setChecked(true)
@@ -83,15 +92,25 @@ export default function TimelinePlayer({ activity, onFinish, onRestart }) {
             <div key={text} data-idx={i} draggable
               onDragStart={()=>onDragStart(i)} onDragOver={e=>onDragOver(e,i)} onDragEnd={onDragEnd}
               onTouchStart={e=>onTouchStart(e,i)} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
-              style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 14px',
+              style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 12px',
                 border:`1.5px solid ${isCorrect?'var(--c-success)':isWrong?'var(--c-danger)':'var(--c-border)'}`,
                 borderRadius:'var(--radius-md)', background:isCorrect?'var(--c-success-bg)':isWrong?'var(--c-danger-bg)':'var(--c-surface)',
-                marginBottom:8, cursor:'grab', transition:'all 0.12s' }}>
+                marginBottom:8, cursor:'grab', transition:'all 0.12s', minHeight:48 }}>
               <span style={{ color:'var(--c-text-hint)', fontSize:16, flexShrink:0 }}><i className="ti ti-grip-vertical" aria-hidden="true" /></span>
               <div style={{ width:22, height:22, borderRadius:'50%', background:'var(--c-bg)', border:'1px solid var(--c-border)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:'var(--c-text-muted)', flexShrink:0 }}>{i+1}</div>
               <span style={{ flex:1, fontSize:15 }}>{text}</span>
               {isCorrect && <i className="ti ti-check" style={{ color:'var(--c-success)', fontSize:16 }} aria-hidden="true" />}
               {isWrong   && <i className="ti ti-x"     style={{ color:'var(--c-danger)',  fontSize:16 }} aria-hidden="true" />}
+              <div style={{ display:'flex', flexDirection:'column', gap:2, flexShrink:0 }}>
+                <button type="button" className="tap-target" aria-label="上移"
+                  onClick={e => { e.stopPropagation(); moveItem(i, -1) }}
+                  disabled={i===0}
+                  style={{ width:36, height:28, padding:0, fontSize:12, minHeight:28 }}>▲</button>
+                <button type="button" className="tap-target" aria-label="下移"
+                  onClick={e => { e.stopPropagation(); moveItem(i, 1) }}
+                  disabled={i===order.length-1}
+                  style={{ width:36, height:28, padding:0, fontSize:12, minHeight:28 }}>▼</button>
+              </div>
             </div>
           )
         })}

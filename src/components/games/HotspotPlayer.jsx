@@ -89,7 +89,7 @@ function LabelPlayer({ meta, difficulty, onFinish }) {
       <p style={{ fontSize:13, color:'var(--c-text-hint)', textAlign:'center', marginBottom:8 }}>
         {selLabel ? '點圖片上的定位點來連線' : '點左側標籤，再點圖片上的定位點'}
       </p>
-      <div ref={wrapRef} style={{ display:'flex', gap:12, alignItems:'flex-start', position:'relative' }}>
+      <div ref={wrapRef} className="hotspot-layout" style={{ display:'flex', gap:12, alignItems:'flex-start', position:'relative' }}>
         <svg style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', pointerEvents:'none', zIndex:4 }} viewBox={`0 0 ${wrapW} ${wrapH}`}>
           {activeLines.map((line, i) => {
             const lbA = labelAnchor(line.labelId)
@@ -107,7 +107,6 @@ function LabelPlayer({ meta, difficulty, onFinish }) {
               </g>
             )
           })}
-          {/* 選中後的 stub */}
           {selLabel !== null && (() => {
             const a = labelAnchor(selLabel)
             if (!a) return null
@@ -115,7 +114,7 @@ function LabelPlayer({ meta, difficulty, onFinish }) {
           })()}
         </svg>
 
-        <div style={{ display:'flex', flexDirection:'column', gap:6, width:120, flexShrink:0, zIndex:3 }}>
+        <div className="label-col" style={{ display:'flex', flexDirection:'column', gap:6, width:120, flexShrink:0, zIndex:3 }}>
           {shuffledLabels.map((lb) => {
             const lbIdx   = labels.findIndex(l => l.id===lb.id)
             const baseColor = COLORS[lbIdx % COLORS.length]

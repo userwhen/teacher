@@ -278,7 +278,34 @@ export default function MazePlayer({ activity, onFinish, onRestart }) {
   const phaseRef   = useRef('intro')
   const tickRef    = useRef(null)
   const canvasRef  = useRef(null)
+  const fitRef     = useRef(null)
   const qIdxRef    = useRef(0)
+  const [scale, setScale] = useState(1)
+
+  // 畫布等比縮放：最大佔可用寬度 90%，保留邊距，不捲動
+  useEffect(() => {
+    const el = fitRef.current
+    if (!el) return
+    const nativeW = COLS * CELL
+    const nativeH = ROWS * CELL
+    const update = () => {
+      const parent = el.parentElement || el
+      const availW = Math.min(parent.clientWidth || window.innerWidth, window.innerWidth * 0.9)
+      const availH = Math.min((window.innerHeight || 600) * 0.55, nativeH)
+      const s = Math.min(1, availW / nativeW, availH / nativeH)
+      setScale(s > 0.2 ? s : 0.2)
+    }
+    update()
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null
+    if (ro) ro.observe(el)
+    window.addEventListener('resize', update)
+    window.addEventListener('orientationchange', update)
+    return () => {
+      if (ro) ro.disconnect()
+      window.removeEventListener('resize', update)
+      window.removeEventListener('orientationchange', update)
+    }
+  }, [phase])
 
   const item = items[qIdxRef.current % items.length]
 
@@ -652,9 +679,11 @@ export default function MazePlayer({ activity, onFinish, onRestart }) {
     const handler = e => {
       const MAP = {
         ArrowUp:[-1,0], ArrowDown:[1,0], ArrowLeft:[0,-1], ArrowRight:[0,1],
+        KeyW:[-1,0], KeyS:[1,0], KeyA:[0,-1], KeyD:[0,1],
         w:[-1,0], s:[1,0], a:[0,-1], d:[0,1],
       }
-      if (MAP[e.key]) { e.preventDefault(); movePlayer(...MAP[e.key]) }
+      const dir = MAP[e.code] || MAP[e.key]
+      if (dir) { e.preventDefault(); movePlayer(...dir) }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -663,9 +692,11 @@ export default function MazePlayer({ activity, onFinish, onRestart }) {
   // ── 觸控滑動 ─────────────────────────────────────────────
   const touchStart = useRef(null)
   function onTouchStart(e) {
+    if (e.cancelable) e.preventDefault()
     touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
   }
   function onTouchEnd(e) {
+    if (e.cancelable) e.preventDefault()
     if (!touchStart.current) return
     const dx = e.changedTouches[0].clientX - touchStart.current.x
     const dy = e.changedTouches[0].clientY - touchStart.current.y
@@ -756,7 +787,9 @@ export default function MazePlayer({ activity, onFinish, onRestart }) {
 
       {phase === 'ready' ? (
         <div className="card" style={{
-          width: COLS * CELL, height: ROWS * CELL, maxWidth:'100%',
+          width: Math.min(COLS * CELL, window.innerWidth * 0.9),
+          maxWidth:'90vw',
+          minHeight: 200,
           margin:'0 auto', padding:'2rem 1.5rem',
           display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
           gap:'1.75rem', textAlign:'center',
@@ -776,22 +809,29 @@ export default function MazePlayer({ activity, onFinish, onRestart }) {
             </p>
           </div>
 
-          <div className="maze-layout">
-            <div style={{ position:'relative', display:'inline-block', maxWidth:'100%', overflowX:'auto' }}>
-              {flashStyle && <div style={flashStyle} />}
+          <div className="maze-layout" style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:16, flexWrap:'wrap' }}>
+            <div ref={fitRef} className="maze-fit-wrap" style={{ position:'relative', width: COLS * CELL * scale, height: ROWS * CELL * scale }}>
+              {flashStyle && <div style={{ ...flashStyle, width:'100%', height:'100%' }} />}
               <canvas
                 ref={canvasRef}
                 width={COLS * CELL}
                 height={ROWS * CELL}
-                style={{ display:'block', borderRadius:'var(--radius-md)', border:'2px solid var(--c-border-strong)' }}
+                style={{
+                  display:'block',
+                  width: COLS * CELL * scale,
+                  height: ROWS * CELL * scale,
+                  borderRadius:'var(--radius-md)',
+                  border:'2px solid var(--c-border-strong)',
+                  touchAction:'none',
+                }}
                 onTouchStart={onTouchStart}
                 onTouchEnd={onTouchEnd}
               />
             </div>
 
-            {/* 方向鍵：寬螢幕時排在畫布右側，空間不夠會自動換到下方置中 */}
+            {/* 方向鍵：寬螢幕排右側，窄螢幕自動換到下方 */}
             <div>
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(3,44px)', gridTemplateRows:'repeat(3,44px)', gap:4, width:'fit-content', margin:'0 auto' }}>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(3,48px)', gridTemplateRows:'repeat(3,48px)', gap:6, width:'fit-content', margin:'0 auto' }}>
                 {[
                   [null,                    () => movePlayer(-1,0), null                   ],
                   [() => movePlayer(0,-1),  null,                   () => movePlayer(0, 1) ],
@@ -799,8 +839,8 @@ export default function MazePlayer({ activity, onFinish, onRestart }) {
                 ].map((row, ri) =>
                   row.map((fn, ci) =>
                     fn
-                      ? <button key={`${ri}-${ci}`} onClick={fn}
-                          style={{ width:44, height:44, fontSize:18, display:'flex', alignItems:'center', justifyContent:'center', padding:0, borderRadius:'var(--radius-sm)' }}>
+                      ? <button key={`${ri}-${ci}`} onClick={fn} className="tap-target"
+                          style={{ width:48, height:48, fontSize:20, display:'flex', alignItems:'center', justifyContent:'center', padding:0, borderRadius:'var(--radius-sm)' }}>
                           {ri===0?'▲':ri===2?'▼':ci===0?'◀':'▶'}
                         </button>
                       : <div key={`${ri}-${ci}`} />

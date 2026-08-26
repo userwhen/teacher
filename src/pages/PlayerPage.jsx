@@ -16,9 +16,10 @@ import HotspotPlayer   from '../components/games/HotspotPlayer.jsx'
 import WordsearchPlayer from '../components/games/WordsearchPlayer.jsx'
 import AnagramPlayer   from '../components/games/AnagramPlayer.jsx'
 import MatchupPlayer   from '../components/games/MatchupPlayer.jsx'
+import PuzzlePlayer    from '../components/games/PuzzlePlayer.jsx'
 
 // 不套用計時器的遊戲（有自己的時間機制）
-const NO_TIMER = ['maze']
+const NO_TIMER = ['maze', 'puzzle']
 
 const PLAYERS = {
   quiz:       QuizPlayer,
@@ -32,6 +33,7 @@ const PLAYERS = {
   wordsearch: WordsearchPlayer,
   anagram:    AnagramPlayer,
   matchup:    MatchupPlayer,
+  puzzle:     PuzzlePlayer,
 }
 
 export default function PlayerPage() {
@@ -100,10 +102,10 @@ setRestartKey(k => k + 1)
 }, [])
 
   return (
-    <div className={`page theme-${theme}`}>
+    <div className={`page play-shell theme-${theme}`}>
       {/* 標頭 */}
-      <div style={styles.header}>
-        <div style={{ flex:1 }}>
+      <div style={{ ...styles.header, flexWrap:'wrap' }}>
+        <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:'flex', gap:6, marginBottom:6, flexWrap:'wrap' }}>
             <span className="tag tag-blue">{activity.subject}</span>
             <span className="tag tag-gray">{activity.grade}</span>
@@ -114,7 +116,7 @@ setRestartKey(k => k + 1)
               </span>
             )}
           </div>
-          <h1 style={styles.title}>{activity.title}</h1>
+          <h1 style={{ ...styles.title, fontSize:18, wordBreak:'break-word' }}>{activity.title}</h1>
         </div>
 
         {/* 計時器 */}

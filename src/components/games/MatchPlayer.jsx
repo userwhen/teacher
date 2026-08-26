@@ -153,8 +153,8 @@ export default function MatchPlayer({ activity, onFinish, onRestart }) {
         {selLeft !== null ? `「${items[selLeft].left}」→ 點右側答案連線` : '點左側，再點右側配對'}
       </p>
 
-      {/* 配對區 */}
-      <div ref={arenaRef} style={{ position:'relative' }}>
+      {/* 配對區 — 保留畫線，手機／平板友善 */}
+      <div ref={arenaRef} className="match-arena" style={{ position:'relative' }}>
         {/* SVG 連線層 */}
         <svg style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', pointerEvents:'none', zIndex:2 }}
           viewBox={`0 0 ${arenaW} ${arenaH}`}>
@@ -174,7 +174,6 @@ export default function MatchPlayer({ activity, onFinish, onRestart }) {
               </g>
             )
           })}
-          {/* 選中後的 stub */}
           {selLeft !== null && (() => {
             const a = anchor(`LChip-${selLeft}`, 'right')
             if (!a) return null
@@ -183,8 +182,7 @@ export default function MatchPlayer({ activity, onFinish, onRestart }) {
         </svg>
 
         {/* 左右兩欄 */}
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:32, position:'relative', zIndex:1 }}>
-          {/* 左欄 */}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:24, position:'relative', zIndex:1 }}>
           <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
             {items.map((item, li) => {
               const line  = lines.find(l => l.li === li)
@@ -192,10 +190,12 @@ export default function MatchPlayer({ activity, onFinish, onRestart }) {
               const isSel = selLeft === li
               return (
                 <div key={li} id={`LChip-${li}`} onClick={() => clickLeft(li)}
-                  style={{ display:'inline-flex', alignItems:'center', padding:'10px 14px',
+                  className="tap-target"
+                  style={{ display:'inline-flex', alignItems:'center', padding:'12px 14px',
                     border:'1.5px solid var(--c-border)', borderRadius:'var(--radius-md)',
                     background:'var(--c-surface)', fontSize:14, lineHeight:1.5,
                     wordBreak:'break-word', alignSelf:'stretch', userSelect:'none',
+                    minHeight:44,
                     cursor: state==='correct' ? 'default' : 'pointer',
                     transition:'all 0.12s', ...chipStyle(state, isSel) }}>
                   {state==='correct' && <i className="ti ti-check" style={{ color:'#1D9E75', marginRight:6, fontSize:13, flexShrink:0 }} aria-hidden="true" />}
@@ -204,17 +204,18 @@ export default function MatchPlayer({ activity, onFinish, onRestart }) {
               )
             })}
           </div>
-          {/* 右欄（打亂） */}
           <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
             {rightOrder.map(ri => {
               const line  = lines.find(l => l.ri === ri)
               const state = line?.state
               return (
                 <div key={ri} id={`RChip-${ri}`} onClick={() => clickRight(ri)}
-                  style={{ display:'inline-flex', alignItems:'center', padding:'10px 14px',
+                  className="tap-target"
+                  style={{ display:'inline-flex', alignItems:'center', padding:'12px 14px',
                     border:'1.5px solid var(--c-border)', borderRadius:'var(--radius-md)',
                     background:'var(--c-surface)', fontSize:14, lineHeight:1.5,
                     wordBreak:'break-word', alignSelf:'stretch', userSelect:'none',
+                    minHeight:44,
                     cursor: state==='correct' ? 'default' : selLeft!==null ? 'pointer' : 'default',
                     transition:'all 0.12s', ...chipStyle(state, false) }}>
                   {state==='correct' && <i className="ti ti-check" style={{ color:'#1D9E75', marginRight:6, fontSize:13, flexShrink:0 }} aria-hidden="true" />}

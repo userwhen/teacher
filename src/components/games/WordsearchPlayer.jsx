@@ -104,10 +104,15 @@ export default function WordsearchPlayer({ activity, onFinish, onRestart }) {
   const showHint  = meta.showHint !== false           // 預設顯示提示
   const matchMode = !!meta.matchMode                  // 預設關閉配對模式
   const maxHearts = Math.min(9, Math.max(1, meta.hearts || 5))
-  const gridTier  = meta.gridSize || 14                // 簡單10 / 中等14 / 困難18
+  // 手機／平板友善：簡單 10、中等／困難 12（避免格子太小）
+  const rawTier   = meta.gridSize || 14
+  const gridTier  = rawTier <= 10 ? 10 : 12
 
-  const size = useMemo(() => Math.max(gridTier, Math.max(...rawWords.map(w => w.length), 0) + 4), [])
-  const { grid, placed } = useMemo(() => buildGrid(rawWords, size), [])
+  const size = useMemo(() => {
+    const wordMax = Math.max(...rawWords.map(w => w.length), 0)
+    return Math.min(12, Math.max(gridTier, wordMax + 2))
+  }, [gridTier, rawWords])
+  const { grid, placed } = useMemo(() => buildGrid(rawWords, size), [rawWords, size])
   const validPlaced = placed.filter(p => p.cells.length > 0)
 
   const [found,        setFound]        = useState(new Set())
@@ -277,10 +282,11 @@ export default function WordsearchPlayer({ activity, onFinish, onRestart }) {
   }
 
   const isChinese = rawWords.some(w => /[\u4e00-\u9fff]/.test(w))
-  const CELL_SIZE = isChinese ? 34 : 26
+  // 手機友善：用 CSS 變數讓格子自適應容器，最小約 28px
+  const cellMin = isChinese ? 30 : 26
 
   return (
-    <div>
+    <div className="play-shell">
       {/* 進度 / 愛心 */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:13, color:'var(--c-text-muted)', marginBottom:6 }}>
         <span>已找到 {found.size} / {validPlaced.length} 個詞</span>
@@ -316,9 +322,9 @@ export default function WordsearchPlayer({ activity, onFinish, onRestart }) {
         </p>
       )}
 
-      {/* 字格 + 配對面板 */}
-      <div style={{ display:'flex', gap:12, alignItems:'flex-start' }}>
-        <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
+      {/* 字格 + 配對面板：直向堆疊、橫向並排 */}
+      <div className="ws-layout" style={{ display:'flex', gap:12, alignItems:'flex-start', flexWrap:'wrap' }}>
+        <div className="ws-grid-wrap" style={{ flex:'1 1 auto', minWidth:0 }}>
           <div
             ref={gridRef}
             onMouseLeave={() => { if(isSelecting.current) confirmSelection() }}
@@ -327,12 +333,16 @@ export default function WordsearchPlayer({ activity, onFinish, onRestart }) {
             onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}
             style={{
-              display:'inline-grid',
-              gridTemplateColumns:`repeat(${size}, ${CELL_SIZE}px)`,
+              display:'grid',
+              gridTemplateColumns:`repeat(${size}, minmax(${cellMin}px, 1fr))`,
               gap:2,
               userSelect:'none',
               cursor:'crosshair',
               padding:4,
+              width:'100%',
+              maxWidth: `min(100%, ${size * 40}px)`,
+              margin:'0 auto',
+              touchAction:'none',
             }}
           >
             {grid.map((row, r) =>
@@ -343,7 +353,7 @@ export default function WordsearchPlayer({ activity, onFinish, onRestart }) {
                   onMouseDown={() => onMouseDown(r, c)}
                   onMouseEnter={() => onMouseEnter(r, c)}
                   style={{
-                    width: CELL_SIZE, height: CELL_SIZE,
+                    aspectRatio:'1',
                     display:'flex', alignItems:'center', justifyContent:'center',
                     fontSize: isChinese ? 15 : 13,
                     fontWeight: 500,
@@ -353,6 +363,7 @@ export default function WordsearchPlayer({ activity, onFinish, onRestart }) {
                     border: cellBorder(r, c),
                     transition:'background 0.08s, color 0.08s',
                     pointerEvents:'auto',
+                    minHeight: cellMin,
                   }}
                 >
                   {char}
@@ -364,13 +375,14 @@ export default function WordsearchPlayer({ activity, onFinish, onRestart }) {
 
         {/* 右側：配對內容（配對模式才顯示） */}
         {matchMode && (
-          <div style={{ display:'flex', flexDirection:'column', gap:6, width:120, flexShrink:0 }}>
+          <div style={{ display:'flex', flexDirection:'column', gap:6, width:120, flexShrink:0, maxWidth:'100%' }}>
             <p style={{ fontSize:11, color:'var(--c-text-hint)', textAlign:'center', marginBottom:2 }}>對應內容</p>
             {shuffledMatches.map((opt, i) => {
               const isUsed  = usedMatches.has(opt)
               const isWrong = wrongOption === opt
               return (
                 <div key={i} onClick={() => !isUsed && pickMatchOption(opt)}
+                  className="tap-target"
                   style={{
                     padding:7, borderRadius:'var(--radius-sm)', textAlign:'center',
                     cursor: isUsed ? 'default' : 'pointer',
